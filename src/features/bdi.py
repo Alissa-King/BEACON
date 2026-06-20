@@ -1,108 +1,38 @@
 """
-BEACON Distress Index (BDI) calculation (Appendix A).
+BEACON Distress Index (BDI) — defense-ready definition.
 
-BDI = sum(W_i * D_i)  where D_i is a standardized 0-100 domain score.
+The BDI is a calibrated transformation of the XGBoost model's predicted
+probability of financial distress:
 
-Domains and weights:
-  Financial Capacity      (W=0.30): months_cash_on_hand, current_ratio,
-                                    unrestricted_net_assets_ratio
-  Financial Sustainability(W=0.30): operating_margin, consecutive_deficits
-  Resource Dependence     (W=0.20): gov_grant_concentration, revenue_hhi
-  Organizational Risk     (W=0.20): debt_to_equity
+    BDI = 100 × P(Distress | X)_calibrated
+
+where P(Distress) is produced by an isotonic-regression calibrator fitted
+on a held-out calibration set (fiscal years 2020-2021). This ensures
+probabilities reflect observed distress frequencies rather than raw
+classifier scores.
+
+The four BEACON domains (Financial Capacity, Financial Sustainability,
+Resource Dependence, Organizational Risk) are NOT inputs to the BDI
+formula. They are an explanatory decomposition layer applied post-hoc
+via SHAP value aggregation to make risk drivers interpretable for
+governance audiences.
+
+BDI interpretation scale:
+  80–100  Severe Risk   — high likelihood of distress event within 24 months
+  60–79   Elevated Risk — monitor and initiate contingency planning
+  40–59   Moderate Risk — early-warning; review primary risk drivers
+  0–39    Low Risk      — stable; maintain current trajectory
+
+Limitation: BDI is validated through predictive performance against
+observed distress outcomes (calibration, AUC-ROC). It is an operational
+risk score, not a latent financial construct.
 """
 
 import numpy as np
 import pandas as pd
 
 
-DOMAIN_WEIGHTS = {
-    "financial_capacity": 0.30,
-    "financial_sustainability": 0.30,
-    "resource_dependence": 0.20,
-    "organizational_risk": 0.20,
-}
-
-# Variables where HIGHER value = BETTER resilience (score goes up)
-POSITIVE_INDICATORS = {
-    "months_cash_on_hand",
-    "current_ratio",
-    "unrestricted_net_assets_ratio",
-    "operating_margin",
-}
-
-# Variables where HIGHER value = WORSE resilience (score is inverted)
-NEGATIVE_INDICATORS = {
-    "consecutive_deficits",
-    "gov_grant_concentration",
-    "revenue_hhi",
-    "debt_to_equity",
-}
-
-# Clip bounds (5th/95th percentiles per dissertation)
-PERCENTILE_CLIP = (5, 95)
-
-
-def _minmax_scale(series: pd.Series, clip_pct: tuple = PERCENTILE_CLIP) -> pd.Series:
-    """Scale series to 0-100 after clipping at given percentiles."""
-    lo = np.percentile(series.dropna(), clip_pct[0])
-    hi = np.percentile(series.dropna(), clip_pct[1])
-    clipped = series.clip(lo, hi)
-    if hi == lo:
-        return pd.Series(50.0, index=series.index)
-    return (clipped - lo) / (hi - lo) * 100
-
-
-def _domain_score(df: pd.DataFrame, variables: list[str]) -> pd.Series:
-    """Average standardized score across domain variables, inverting negative indicators."""
-    scores = []
-    for var in variables:
-        if var not in df.columns:
-            continue
-        scaled = _minmax_scale(df[var])
-        if var in NEGATIVE_INDICATORS:
-            scaled = 100 - scaled
-        scores.append(scaled)
-    if not scores:
-        return pd.Series(50.0, index=df.index)
-    return pd.concat(scores, axis=1).mean(axis=1)
-
-
-def compute_bdi(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add per-domain scores and the final BDI score to the dataframe.
-    Returns the input dataframe with new columns added.
-    """
-    df = df.copy()
-
-    df["d_financial_capacity"] = _domain_score(
-        df, ["months_cash_on_hand", "current_ratio", "unrestricted_net_assets_ratio"]
-    )
-    df["d_financial_sustainability"] = _domain_score(
-        df, ["operating_margin", "consecutive_deficits"]
-    )
-    df["d_resource_dependence"] = _domain_score(
-        df, ["gov_grant_concentration", "revenue_hhi"]
-    )
-    df["d_organizational_risk"] = _domain_score(
-        df, ["debt_to_equity"]
-    )
-
-    df["bdi_score"] = (
-        DOMAIN_WEIGHTS["financial_capacity"] * df["d_financial_capacity"]
-        + DOMAIN_WEIGHTS["financial_sustainability"] * df["d_financial_sustainability"]
-        + DOMAIN_WEIGHTS["resource_dependence"] * df["d_resource_dependence"]
-        + DOMAIN_WEIGHTS["organizational_risk"] * df["d_organizational_risk"]
-    )
-
-    df["bdi_category"] = pd.cut(
-        df["bdi_score"],
-        bins=[-np.inf, 40, 60, 80, np.inf],
-        labels=["Red", "Orange", "Yellow", "Green"],
-    )
-
-    return df
-
-
+# Feature columns used as model inputs (Form 990 derived, Appendix B)
 BDI_FEATURE_COLUMNS = [
     "months_cash_on_hand",
     "current_ratio",
@@ -113,3 +43,68 @@ BDI_FEATURE_COLUMNS = [
     "revenue_hhi",
     "debt_to_equity",
 ]
+
+# Domain groupings used for SHAP explanatory decomposition only
+SHAP_DOMAIN_MAP = {
+    "Financial Capacity": [
+        "months_cash_on_hand",
+        "current_ratio",
+        "unrestricted_net_assets_ratio",
+    ],
+    "Financial Sustainability": [
+        "operating_margin",
+        "consecutive_deficits",
+    ],
+    "Resource Dependence": [
+        "gov_grant_concentration",
+        "revenue_hhi",
+    ],
+    "Organizational Risk": [
+        "debt_to_equity",
+    ],
+}
+
+# Risk category thresholds — HIGH BDI = HIGH DISTRESS RISK
+_BINS = [-np.inf, 40, 60, 80, np.inf]
+_LABELS = ["Low Risk", "Moderate Risk", "Elevated Risk", "Severe Risk"]
+
+# Colour aliases used in BEAM trigger logic (high risk = Red)
+CATEGORY_TO_COLOUR = {
+    "Low Risk": "Green",
+    "Moderate Risk": "Yellow",
+    "Elevated Risk": "Orange",
+    "Severe Risk": "Red",
+}
+
+
+def compute_bdi(df: pd.DataFrame, calibrated_probs: np.ndarray) -> pd.DataFrame:
+    """
+    Attach BDI scores and risk categories to the dataframe.
+
+    Parameters
+    ----------
+    df : cleaned panel dataframe containing BDI_FEATURE_COLUMNS
+    calibrated_probs : 1-D array of calibrated P(distress) in [0, 1],
+                       one value per row of df, produced by the isotonic
+                       regression calibrator
+
+    Returns
+    -------
+    df with new columns:
+        bdi_score      float  0–100
+        bdi_category   str    Severe / Elevated / Moderate / Low Risk
+        bdi_colour     str    Red / Orange / Yellow / Green
+    """
+    if len(calibrated_probs) != len(df):
+        raise ValueError(
+            f"calibrated_probs length ({len(calibrated_probs)}) "
+            f"must match dataframe rows ({len(df)})"
+        )
+
+    df = df.copy()
+    df["bdi_score"] = np.clip(calibrated_probs * 100, 0, 100)
+    df["bdi_category"] = pd.cut(
+        df["bdi_score"], bins=_BINS, labels=_LABELS
+    ).astype(str)
+    df["bdi_colour"] = df["bdi_category"].map(CATEGORY_TO_COLOUR)
+    return df

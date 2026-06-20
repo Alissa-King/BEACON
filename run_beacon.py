@@ -1,36 +1,44 @@
 """
-BEACON Framework — master run script.
+BEACON Framework — master run script (defense-ready version).
 
-Steps:
-  1. Generate synthetic 990 data (or load real NCCS data)
-  2. Clean and preprocess
-  3. Compute BDI scores
-  4. Train Logistic Regression, Random Forest, and XGBoost
-  5. Run SHAP explainability analysis
-  6. Generate all visualizations
-  7. Print an example BEAM report for a high-risk organization
+Pipeline (Section 3.3):
+  1.  Generate synthetic Form 990 panel (NTEE L/P, FY2013–2023)
+  2.  Clean and preprocess (Appendix C)
+  3.  Temporal split: TRAIN 2013-2019 | CAL 2020-2021 | TEST 2022-2023
+  4.  Train Logistic Regression, Random Forest, XGBoost
+  5.  Calibrate XGBoost with isotonic regression on CAL set
+  6.  Compute BDI = 100 × calibrated P(distress) for full dataset
+  7.  Run SHAP explainability + domain-level decomposition
+  8.  Generate all visualizations (ROC, PR, calibration, BDI, distress rates)
+  9.  Print example BEAM report for a Severe Risk organization
 """
 
 import json
 from pathlib import Path
 
+import joblib
+import numpy as np
+import pandas as pd
+
 from src.ingestion.synthetic_data import generate_synthetic_990
 from src.ingestion.cleaning_pipeline import run_cleaning_pipeline
-from src.features.bdi import compute_bdi
-from src.models.train import train_and_evaluate
+from src.features.bdi import BDI_FEATURE_COLUMNS, compute_bdi
+from src.models.calibration import calibrate
+from src.models.train import train_and_evaluate, CALIBRATION_YEARS
 from src.models.visualize import (
+    plot_calibration_curve,
     plot_roc_curves,
+    plot_precision_recall,
     plot_bdi_distribution,
     plot_bdi_distress_rates,
 )
-from src.explainability.shap_analysis import run_shap_analysis
 from src.explainability.shap_analysis import (
+    run_shap_analysis,
     load_model_and_explainer,
     compute_shap_values,
     get_org_shap_drivers,
 )
 from src.beam.action_matrix import get_beam_actions, format_beam_report
-from src.features.bdi import BDI_FEATURE_COLUMNS
 
 
 def main():
@@ -50,64 +58,76 @@ def main():
     df_clean = run_cleaning_pipeline(df_raw)
     print(f"  Records after cleaning: {len(df_clean):,}")
 
-    # ── 3. BDI ───────────────────────────────────────────────────────────────
-    print("\nSTEP 3: Computing BEACON Distress Index (BDI)")
-    df_bdi = compute_bdi(df_clean)
-    df_bdi.to_csv("data/processed/beacon_panel.csv", index=False)
-    print(f"  BDI score range: {df_bdi['bdi_score'].min():.1f} – {df_bdi['bdi_score'].max():.1f}")
-    print(f"  BDI category distribution:\n{df_bdi['bdi_category'].value_counts().to_string()}")
+    # ── 3+4. Train models with temporal holdout ───────────────────────────────
+    print("\nSTEP 3+4: Temporal split & model training")
+    results = train_and_evaluate(df_clean)
 
-    # ── 4. Train models ───────────────────────────────────────────────────────
-    print("\nSTEP 4: Training predictive models (10-fold CV + holdout)")
-    results = train_and_evaluate(df_bdi)
-
-    print("\n── Model Comparison Summary ──")
-    print(f"{'Model':<25} {'Acc':>6} {'Prec':>7} {'Rec':>6} {'F1':>6} {'AUC':>6}")
-    print("-" * 55)
+    print("\n── Model Comparison (time-based holdout: FY2022–2023) ──")
+    print(f"{'Model':<25} {'Acc':>6} {'Prec':>7} {'Rec':>6} {'F1':>6} "
+          f"{'AUC':>6} {'AvgP':>6} {'Brier':>7}")
+    print("-" * 68)
     for name, r in results.items():
-        h = r["holdout"]
-        print(f"{name:<25} {h['accuracy']:>6.3f} {h['precision']:>7.3f} "
-              f"{h['recall']:>6.3f} {h['f1']:>6.3f} {h['auc_roc']:>6.3f}")
+        h = r["holdout_test"]
+        brier = f"{h.get('brier_score', 'N/A'):>7}" if "brier_score" in h else "    N/A"
+        print(
+            f"{name:<25} {h['accuracy']:>6.3f} {h['precision']:>7.3f} "
+            f"{h['recall']:>6.3f} {h['f1']:>6.3f} {h['auc_roc']:>6.3f} "
+            f"{h['avg_precision']:>6.3f} {brier}"
+        )
 
-    # ── 5. SHAP analysis ──────────────────────────────────────────────────────
-    print("\nSTEP 5: Running SHAP explainability analysis")
-    shap_values, explainer = run_shap_analysis(df_bdi)
+    # ── 5. Compute calibrated BDI for full dataset ────────────────────────────
+    print("\nSTEP 5: Computing calibrated BDI (100 × P(distress)_calibrated)")
+    pipeline = joblib.load("models/xgboost.pkl")
+    calibrator = joblib.load("models/xgboost_calibrator.pkl")
 
-    # ── 6. Visualizations ────────────────────────────────────────────────────
-    print("\nSTEP 6: Generating visualizations")
-    plot_roc_curves(df_bdi)
-    plot_bdi_distribution(df_bdi)
-    plot_bdi_distress_rates(df_bdi)
+    X_all = df_clean[BDI_FEATURE_COLUMNS]
+    raw_probs = pipeline.predict_proba(X_all)[:, 1]
+    cal_probs = calibrate(calibrator, raw_probs)
 
-    # ── 7. Example BEAM report ───────────────────────────────────────────────
-    print("\nSTEP 7: Generating example BEAM report for a Red-category organization")
-    red_orgs = df_bdi[df_bdi["bdi_category"] == "Red"]
-    if red_orgs.empty:
-        red_orgs = df_bdi.nsmallest(1, "bdi_score")
+    df_scored = compute_bdi(df_clean, cal_probs)
+    df_scored.to_csv("data/processed/beacon_panel_scored.csv", index=False)
 
-    sample = red_orgs.iloc[0]
-    sample_idx = df_bdi.index.get_loc(sample.name)
+    print(f"  BDI range: {df_scored['bdi_score'].min():.1f} – "
+          f"{df_scored['bdi_score'].max():.1f}")
+    print(f"  Category distribution:\n"
+          f"{df_scored['bdi_category'].value_counts().to_string()}")
 
-    X = df_bdi[BDI_FEATURE_COLUMNS]
-    explainer, scaler, clf = load_model_and_explainer(X)
-    shap_values = compute_shap_values(explainer, scaler, X)
+    # ── 6. SHAP analysis ──────────────────────────────────────────────────────
+    print("\nSTEP 6: SHAP explainability + domain decomposition")
+    shap_values, explainer = run_shap_analysis(df_clean)
 
-    drivers = get_org_shap_drivers(shap_values, sample_idx, top_n=3)
-    actions = get_beam_actions(drivers, str(sample["bdi_category"]))
+    # ── 7. Visualizations ────────────────────────────────────────────────────
+    print("\nSTEP 7: Generating visualizations")
+    plot_roc_curves(df_clean)
+    plot_precision_recall(df_clean)
+    plot_calibration_curve(df_clean)
+    plot_bdi_distribution(df_scored)
+    plot_bdi_distress_rates(df_scored)
+
+    # ── 8. Example BEAM report ───────────────────────────────────────────────
+    print("\nSTEP 8: Example BEAM report for a Severe Risk organization")
+    severe = df_scored[df_scored["bdi_category"] == "Severe Risk"]
+    if severe.empty:
+        severe = df_scored.nlargest(1, "bdi_score")
+
+    sample = severe.iloc[0]
+    sample_idx = df_clean.index.get_loc(sample.name)
+
+    explainer_obj, scaler, clf = load_model_and_explainer(X_all)
+    sv_sample = compute_shap_values(explainer_obj, scaler, X_all)
+    drivers = get_org_shap_drivers(sv_sample, sample_idx, top_n=3)
+    actions = get_beam_actions(drivers, str(sample["bdi_colour"]))
     report = format_beam_report(
-        org_name=str(sample.get("org_name", sample.get("ein", "Sample Org"))),
+        org_name=str(sample.get("org_name", f"EIN {sample.get('ein', '?')}")),
         bdi_score=float(sample["bdi_score"]),
         bdi_category=str(sample["bdi_category"]),
         beam_actions=actions,
     )
-
     print("\n" + report)
 
-    report_path = Path("reports/sample_beam_report.txt")
-    report_path.write_text(report)
-    print(f"\nSample BEAM report saved to {report_path}")
-    print("\nAll outputs saved to models/ and reports/figures/")
-    print("Done.")
+    Path("reports/sample_beam_report.txt").write_text(report)
+    print("Saved sample BEAM report to reports/sample_beam_report.txt")
+    print("\nAll outputs in models/ and reports/. Done.")
 
 
 if __name__ == "__main__":

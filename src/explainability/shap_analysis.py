@@ -1,10 +1,19 @@
 """
 BEACON XAI layer: SHAP-based explainability for the XGBoost model.
 
-Produces:
-  - Global feature importance (SHAP summary)
-  - Per-organization SHAP values for BEAM trigger logic
-  - Saved plots to reports/figures/
+SHAP values are used for post-hoc interpretation of model outputs and
+feature contribution analysis at the organization level. They are
+associative explanations of model behavior, not causal explanations of
+organizational failure.
+
+Two interpretive outputs:
+  1. Global feature importance (mean |SHAP|) — identifies which financial
+     characteristics most strongly predict distress across the sample
+  2. Domain-level SHAP aggregation — groups features into the four BEACON
+     explanatory domains to produce governance-ready risk attribution
+     (this is the "explanatory decomposition layer," not the BDI formula)
+  3. Per-organization drivers — top-N features explaining a single org's
+     BDI score, fed into the BEAM action matrix
 """
 
 from pathlib import Path
@@ -17,7 +26,7 @@ import numpy as np
 import pandas as pd
 import shap
 
-from src.features.bdi import BDI_FEATURE_COLUMNS
+from src.features.bdi import BDI_FEATURE_COLUMNS, SHAP_DOMAIN_MAP
 
 FIGURES_DIR = Path("reports/figures")
 MODEL_PATH = Path("models/xgboost.pkl")
@@ -34,90 +43,128 @@ FEATURE_LABELS = {
 }
 
 
-def load_model_and_explainer(X_train: pd.DataFrame):
+def load_model_and_explainer(X_ref: pd.DataFrame):
+    """Load fitted XGBoost pipeline and build a TreeExplainer."""
     pipeline = joblib.load(MODEL_PATH)
     clf = pipeline.named_steps["clf"]
     scaler = pipeline.named_steps["scaler"]
-    X_scaled = scaler.transform(X_train)
     explainer = shap.TreeExplainer(clf)
     return explainer, scaler, clf
 
 
 def compute_shap_values(explainer, scaler, X: pd.DataFrame) -> np.ndarray:
     X_scaled = scaler.transform(X)
-    return explainer.shap_values(X_scaled)
+    sv = explainer.shap_values(X_scaled)
+    # XGBoost binary returns 2D array; multi-output returns 3D — normalise
+    return sv if sv.ndim == 2 else sv[:, :, 1]
 
 
-def plot_shap_summary(shap_values: np.ndarray, X: pd.DataFrame, save: bool = True) -> None:
+def compute_shap_domain_contributions(
+    shap_values: np.ndarray,
+    X: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Aggregate SHAP values into the four BEACON explanatory domains.
+
+    Returns a DataFrame with one row per observation and one column per domain,
+    containing the mean signed SHAP contribution for that domain.
+    A positive domain contribution indicates the domain is increasing the
+    predicted distress probability for that organization.
+    """
+    domain_shap = {}
+    feat_idx = {f: i for i, f in enumerate(BDI_FEATURE_COLUMNS)}
+    for domain, features in SHAP_DOMAIN_MAP.items():
+        idxs = [feat_idx[f] for f in features if f in feat_idx]
+        if idxs:
+            domain_shap[domain] = shap_values[:, idxs].sum(axis=1)
+    return pd.DataFrame(domain_shap, index=X.index)
+
+
+def plot_shap_summary(shap_values: np.ndarray, X: pd.DataFrame) -> None:
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     X_labeled = X.rename(columns=FEATURE_LABELS)
-    shap_vals = shap_values if shap_values.ndim == 2 else shap_values[:, :, 1]
-
     fig, ax = plt.subplots(figsize=(10, 6))
     shap.summary_plot(
-        shap_vals,
-        X_labeled,
-        plot_type="dot",
-        max_display=8,
-        show=False,
-        color_bar=True,
+        shap_values, X_labeled,
+        plot_type="dot", max_display=8, show=False, color_bar=True,
     )
-    plt.title("SHAP Summary Plot – BEACON Financial Distress Drivers", fontsize=13, pad=12)
+    plt.title(
+        "SHAP Summary: Feature Contributions to P(Distress)\n"
+        "(associative predictors — not causal drivers)",
+        fontsize=12, pad=10,
+    )
     plt.tight_layout()
-    if save:
-        path = FIGURES_DIR / "shap_summary.png"
-        plt.savefig(path, dpi=150, bbox_inches="tight")
-        print(f"Saved SHAP summary to {path}")
+    path = FIGURES_DIR / "shap_summary.png"
+    plt.savefig(path, dpi=150, bbox_inches="tight")
     plt.close()
+    print(f"Saved SHAP summary to {path}")
 
 
-def plot_shap_bar(shap_values: np.ndarray, X: pd.DataFrame, save: bool = True) -> None:
+def plot_shap_bar(shap_values: np.ndarray, X: pd.DataFrame) -> None:
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-    shap_vals = shap_values if shap_values.ndim == 2 else shap_values[:, :, 1]
-    mean_abs = np.abs(shap_vals).mean(axis=0)
+    mean_abs = np.abs(shap_values).mean(axis=0)
     importance_df = (
         pd.DataFrame({"feature": BDI_FEATURE_COLUMNS, "mean_shap": mean_abs})
         .replace({"feature": FEATURE_LABELS})
         .sort_values("mean_shap", ascending=True)
     )
-
     fig, ax = plt.subplots(figsize=(9, 5))
     colors = plt.cm.RdYlGn_r(np.linspace(0.1, 0.9, len(importance_df)))
     ax.barh(importance_df["feature"], importance_df["mean_shap"], color=colors)
-    ax.set_xlabel("Mean |SHAP Value|", fontsize=11)
-    ax.set_title("Global Feature Importance – XGBoost SHAP Values", fontsize=13)
+    ax.set_xlabel("Mean |SHAP Value| — contribution to P(Distress)", fontsize=11)
+    ax.set_title("Global Feature Importance (SHAP) — XGBoost", fontsize=12)
     ax.tick_params(labelsize=9)
     plt.tight_layout()
-    if save:
-        path = FIGURES_DIR / "shap_importance.png"
-        plt.savefig(path, dpi=150, bbox_inches="tight")
-        print(f"Saved SHAP importance to {path}")
+    path = FIGURES_DIR / "shap_importance.png"
+    plt.savefig(path, dpi=150, bbox_inches="tight")
     plt.close()
+    print(f"Saved SHAP importance to {path}")
+
+
+def plot_shap_domain_contributions(domain_df: pd.DataFrame) -> None:
+    """Bar chart of mean signed SHAP contribution per BEACON domain."""
+    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+    means = domain_df.mean()
+    colors = ["#c0392b" if v > 0 else "#2e8b57" for v in means]
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.barh(means.index, means.values, color=colors, edgecolor="white")
+    ax.axvline(0, color="black", lw=0.8)
+    ax.set_xlabel("Mean SHAP contribution to P(Distress)", fontsize=11)
+    ax.set_title(
+        "SHAP Domain-Level Explanatory Decomposition\n"
+        "(red = increases distress risk on average; green = protective)",
+        fontsize=11,
+    )
+    plt.tight_layout()
+    path = FIGURES_DIR / "shap_domain_contributions.png"
+    plt.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"Saved domain contributions to {path}")
 
 
 def get_org_shap_drivers(
     shap_values: np.ndarray, idx: int, top_n: int = 3
 ) -> list[dict]:
-    """Return top N SHAP drivers for a single organization row."""
-    shap_vals = shap_values if shap_values.ndim == 2 else shap_values[:, :, 1]
-    row = shap_vals[idx]
+    """Top-N SHAP drivers for a single organization (by absolute value)."""
+    row = shap_values[idx]
     sorted_idx = np.argsort(np.abs(row))[::-1][:top_n]
-    drivers = []
-    for i in sorted_idx:
-        feature = BDI_FEATURE_COLUMNS[i]
-        drivers.append({
-            "feature": feature,
-            "label": FEATURE_LABELS.get(feature, feature),
+    return [
+        {
+            "feature": BDI_FEATURE_COLUMNS[i],
+            "label": FEATURE_LABELS.get(BDI_FEATURE_COLUMNS[i], BDI_FEATURE_COLUMNS[i]),
             "shap_value": round(float(row[i]), 4),
             "direction": "increases" if row[i] > 0 else "decreases",
-        })
-    return drivers
+        }
+        for i in sorted_idx
+    ]
 
 
-def run_shap_analysis(df: pd.DataFrame) -> tuple[np.ndarray, shap.TreeExplainer]:
+def run_shap_analysis(df: pd.DataFrame) -> tuple[np.ndarray, object]:
     X = df[BDI_FEATURE_COLUMNS]
     explainer, scaler, clf = load_model_and_explainer(X)
     shap_values = compute_shap_values(explainer, scaler, X)
+    domain_df = compute_shap_domain_contributions(shap_values, X)
     plot_shap_summary(shap_values, X)
     plot_shap_bar(shap_values, X)
+    plot_shap_domain_contributions(domain_df)
     return shap_values, explainer

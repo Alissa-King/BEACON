@@ -1,28 +1,33 @@
 ======================================================================
 BEACON FINANCIAL RESILIENCE REPORT
 ======================================================================
-Organization : NP_Org_01461
-BDI Score    : 25.5 / 100
-Category     : RED
+Organization : NP_Org_00828
+BDI Score    : 84.6 / 100  (0 = Low Risk → 100 = Severe Risk)
+Category     : SEVERE RISK
 
-PRIMARY RISK DRIVERS (XAI / SHAP)
-----------------------------------------
-  1. Months of Cash on Hand [SHAP: +0.436] — increases distress risk
-  2. Debt-to-Equity Ratio [SHAP: +0.370] — increases distress risk
-  3. Revenue HHI (Concentration) [SHAP: +0.235] — increases distress risk
+NOTE: BDI reflects predicted probability of financial distress
+based on Form 990 financial characteristics. SHAP drivers below
+are associative predictors of model output, not causal factors.
 
-BEAM EXECUTIVE ACTIONS
+PRIMARY RISK DRIVERS (SHAP Explanatory Decomposition)
 ----------------------------------------
-  [1] Risk Driver: Months of Cash on Hand
+  1. Months of Cash on Hand [SHAP: +0.647] — increases distress risk
+  2. Gov. Grant Concentration [SHAP: +0.338] — increases distress risk
+  3. Debt-to-Equity Ratio [SHAP: +0.299] — increases distress risk
+
+BEAM GOVERNANCE RESPONSE TAXONOMY
+(decision support — professional judgment required)
+----------------------------------------
+  [1] Risk Association: Months of Cash on Hand
       Executive: Enact 90-day cash flow forecasting; draw on lines of credit; freeze non-essential hiring and capital expenditures.
-      Board    : Mandate bi-weekly liquidity updates from the CFO; review reserve policies; form emergency finance committee.
+      Board    : Mandate bi-weekly liquidity updates from the CFO; review reserve policies; form an emergency finance committee.
 
-  [2] Risk Driver: Debt-to-Equity Ratio
+  [2] Risk Association: Gov. Grant Concentration
+      Executive: Launch a multi-year strategic initiative to build unrestricted individual giving and corporate sponsorships.
+      Board    : Require management to tie executive performance metrics to unrestricted revenue growth targets.
+
+  [3] Risk Association: Debt-to-Equity Ratio
       Executive: Renegotiate debt terms; prioritize debt reduction in the annual budget; defer capital projects until ratio improves.
       Board    : Establish a debt ceiling policy; require CFO to report debt-to-equity quarterly alongside standard financials.
-
-  [3] Risk Driver: Revenue HHI (Concentration)
-      Executive: Develop a revenue diversification plan targeting at least 3 independent revenue streams within 18 months.
-      Board    : Commission a revenue sustainability audit; set board-level diversification targets as a KPI in the CEO evaluation.
 
 ======================================================================
