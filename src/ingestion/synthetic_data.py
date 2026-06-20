@@ -113,13 +113,22 @@ def generate_synthetic_990(n_orgs: int = 2000, seed: int = 42) -> pd.DataFrame:
                 total_net_assets, 1
             )
 
+            # Program expense ratio: healthier orgs spend more on programs vs. admin
+            # Low-risk orgs: ~75-90% program; high-risk orgs: ~50-75% (admin bloat or cuts)
+            program_expense_ratio = np.clip(
+                rng.normal(0.82 - 0.15 * risk, 0.08), 0.30, 0.98
+            )
+
+            # Organizational scale: log total revenue (larger orgs more resilient)
+            total_revenue_log = float(np.log(np.maximum(total_revenue, 1)))
+
             records.append({
                 "ein": org["ein"],
                 "org_name": org["org_name"],
                 "ntee_code": org["ntee_code"],
                 "state": org["state"],
                 "fiscal_year": year,
-                # Form 990 derived variables (Appendix B)
+                # Form 990 derived variables (Appendix B / variable_dictionary.py)
                 "total_revenue": total_revenue,
                 "total_expenses": total_expenses,
                 "months_cash_on_hand": months_cash,
@@ -133,6 +142,8 @@ def generate_synthetic_990(n_orgs: int = 2000, seed: int = 42) -> pd.DataFrame:
                 "gov_grant_concentration": gov_dep,
                 "revenue_hhi": hhi,
                 "debt_to_equity": debt_to_equity,
+                "program_expense_ratio": program_expense_ratio,
+                "total_revenue_log": total_revenue_log,
             })
 
     df = pd.DataFrame(records)

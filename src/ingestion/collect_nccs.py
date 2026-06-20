@@ -115,6 +115,8 @@ NCCS_RAW_COLUMNS = {
     "GOVGRANTS":    "gov_grants_raw",        # Part VIII 1e
     "PROGREV":      "program_service_rev",   # Part VIII 2
     "INVSTINC":     "investment_income",     # Part VIII 3
+    # Program expenses (Part IX Column B) for program_expense_ratio
+    "PROGEXP":      "program_expenses",      # Part IX 25b
     # Net assets (pre-2018 and post-2018 names both retained)
     "UNRESTRICTED":       "_una_pre2018",
     "NET_WO_DONOR_RESTR": "_una_post2018",
@@ -190,7 +192,7 @@ def load_year(path: Path, year: int) -> pd.DataFrame:
     for col in ["total_revenue", "total_expenses", "total_assets", "total_liabilities",
                 "total_net_assets", "cash", "current_assets", "current_liabilities",
                 "total_contributions", "gov_grants_raw", "program_service_rev",
-                "investment_income", "unrestricted_net_assets"]:
+                "investment_income", "unrestricted_net_assets", "program_expenses"]:
         if col in sub.columns:
             sub[col] = pd.to_numeric(sub[col], errors="coerce")
 
@@ -240,12 +242,18 @@ def derive_features(df: pd.DataFrame) -> pd.DataFrame:
     df["gov_grant_concentration"] = (gov_raw / contrib).clip(0, 1)
 
     # Revenue HHI — 5-stream decomposition from Part VIII
-    #   Stream 1: government grants
-    #   Stream 2: private contributions (total contributions − government grants)
-    #   Stream 3: program service revenue
-    #   Stream 4: investment income
-    #   Stream 5: other revenue (residual)
     df["revenue_hhi"] = _compute_hhi(df, rev)
+
+    # Program expense ratio (Part IX Column B / Part IX total)
+    if "program_expenses" in df.columns:
+        prog_exp = pd.to_numeric(df["program_expenses"], errors="coerce").clip(lower=0)
+        total_exp = exp.where(exp > 0, other=np.nan)
+        df["program_expense_ratio"] = (prog_exp / total_exp).clip(0, 1)
+    else:
+        df["program_expense_ratio"] = np.nan
+
+    # Organizational scale — log total revenue
+    df["total_revenue_log"] = np.log(rev.clip(lower=1))
 
     # consecutive_deficits — backward-looking streak of negative operating margin
     # Requires the full sorted panel; computed per EIN in a second pass

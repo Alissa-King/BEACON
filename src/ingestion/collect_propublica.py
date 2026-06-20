@@ -173,6 +173,16 @@ def parse_filing(ein: str, ntee_code: str, filing: dict) -> dict | None:
         total_liabilities / tna_denom if total_liabilities is not None and tna_denom else None
     )
 
+    # Program expense ratio — ProPublica field: progservexp (Part IX 25b if available)
+    prog_exp = _safe_float(filing.get("progservexp"))
+    program_expense_ratio = (
+        prog_exp / total_expenses
+        if prog_exp is not None and total_expenses and total_expenses > 0
+        else None
+    )
+
+    total_revenue_log = float(np.log(max(total_revenue, 1))) if total_revenue else None
+
     return {
         "ein": ein,
         "ntee_code": ntee_code,
@@ -187,6 +197,8 @@ def parse_filing(ein: str, ntee_code: str, filing: dict) -> dict | None:
         "gov_grant_concentration": gov_grant_concentration,
         "revenue_hhi": revenue_hhi,
         "debt_to_equity": debt_to_equity,
+        "program_expense_ratio": program_expense_ratio,
+        "total_revenue_log": total_revenue_log,
         # ProPublica doesn't reliably provide Part X current items — leave for KNN imputation
         "months_cash_on_hand": None,
         "current_ratio": None,

@@ -23,6 +23,8 @@ CONTINUOUS_FEATURES = [
     "revenue_hhi",
     "debt_to_equity",
     "consecutive_deficits",
+    "program_expense_ratio",
+    "total_revenue_log",
 ]
 
 WINSORIZE_BOUNDS = (0.01, 0.99)

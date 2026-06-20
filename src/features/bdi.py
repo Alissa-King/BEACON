@@ -17,6 +17,10 @@ formula. They are an explanatory decomposition layer applied post-hoc
 via SHAP value aggregation to make risk drivers interpretable for
 governance audiences.
 
+Feature list and domain assignments are defined in variable_dictionary.py
+and imported here — that module is the single source of truth for
+all variable metadata used in BEACON.
+
 BDI interpretation scale:
   80–100  Severe Risk   — high likelihood of distress event within 24 months
   60–79   Elevated Risk — monitor and initiate contingency planning
@@ -31,38 +35,14 @@ risk score, not a latent financial construct.
 import numpy as np
 import pandas as pd
 
+from src.features.variable_dictionary import PREDICTOR_NAMES, DOMAIN_MAP, FEATURE_LABELS
 
-# Feature columns used as model inputs (Form 990 derived, Appendix B)
-BDI_FEATURE_COLUMNS = [
-    "months_cash_on_hand",
-    "current_ratio",
-    "unrestricted_net_assets_ratio",
-    "operating_margin",
-    "consecutive_deficits",
-    "gov_grant_concentration",
-    "revenue_hhi",
-    "debt_to_equity",
-]
 
-# Domain groupings used for SHAP explanatory decomposition only
-SHAP_DOMAIN_MAP = {
-    "Financial Capacity": [
-        "months_cash_on_hand",
-        "current_ratio",
-        "unrestricted_net_assets_ratio",
-    ],
-    "Financial Sustainability": [
-        "operating_margin",
-        "consecutive_deficits",
-    ],
-    "Resource Dependence": [
-        "gov_grant_concentration",
-        "revenue_hhi",
-    ],
-    "Organizational Risk": [
-        "debt_to_equity",
-    ],
-}
+# Feature columns fed into the ML models — order matters for SHAP alignment
+BDI_FEATURE_COLUMNS: list[str] = PREDICTOR_NAMES
+
+# Domain groupings for SHAP explanatory decomposition (not BDI formula inputs)
+SHAP_DOMAIN_MAP: dict[str, list[str]] = DOMAIN_MAP
 
 # Risk category thresholds — HIGH BDI = HIGH DISTRESS RISK
 _BINS = [-np.inf, 40, 60, 80, np.inf]
