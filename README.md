@@ -128,7 +128,34 @@ pip install -r requirements.txt
 
 ---
 
-## Running the Pipeline
+## Live Dashboard
+
+**[→ Launch BEACON Dashboard](https://beacon-nonprofit-risk.streamlit.app)**
+*(deploys automatically from this repository via Streamlit Community Cloud)*
+
+The dashboard requires no login. It trains on synthetic 990 data on first load (~60 seconds), then provides:
+- BDI risk scoring via manual Form 990 entry or CSV upload
+- SHAP feature contribution charts and BEACON domain decomposition
+- BEAM governance response recommendations
+- Downloadable executive report
+
+### Run Locally
+
+```bash
+pip install -r requirements.txt
+streamlit run app/dashboard.py
+```
+
+### Deploy Your Own Instance (Streamlit Community Cloud)
+
+1. Fork this repository (or push to your own GitHub account)
+2. Go to [share.streamlit.io](https://share.streamlit.io) → **New app**
+3. Select your repo, branch `main`, main file: `app/dashboard.py`
+4. Click **Deploy** — the app trains its own models on first launch
+
+---
+
+## Running the Full Pipeline
 
 ```bash
 python run_beacon.py
@@ -209,7 +236,7 @@ Random Forest is selected as the primary BDI model based on highest holdout AUC-
 | Artifact | Location |
 |---|---|
 | Trained models (3) | `models/*.pkl` |
-| Isotonic calibrator | `models/xgboost_calibrator.pkl` |
+| Isotonic calibrator | `models/random_forest_calibrator.pkl` |
 | Evaluation report | `models/evaluation_report.json` |
 | Scored panel dataset | `data/processed/beacon_panel_scored.csv` |
 | Sample BEAM report | `reports/sample_beam_report.txt` |

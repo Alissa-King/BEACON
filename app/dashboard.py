@@ -1,5 +1,5 @@
 """
-BEACON Dashboard — Streamlit prototype.
+BEACON Dashboard — Streamlit app.
 
 DBA artifact: interactive risk assessment tool for nonprofit finance officers
 and board members. Accepts manual feature entry or CSV upload of Form 990
@@ -9,19 +9,23 @@ data and outputs:
   - BEAM governance response recommendations
   - Downloadable executive report
 
-Run:
+Run locally:
     streamlit run app/dashboard.py
-    # or, from repo root:
-    python -m streamlit run app/dashboard.py
 
-Requires trained models at models/random_forest.pkl and
-models/random_forest_calibrator.pkl. Run `python run_beacon.py` first
-to generate these.
+Deploy to Streamlit Community Cloud:
+    1. Push repo to GitHub (public or private with access granted)
+    2. Go to share.streamlit.io → New app → select this repo
+    3. Main file path: app/dashboard.py
+    4. Click Deploy
+
+Models are trained automatically on first launch using synthetic 990 data
+(2,000 organizations, 2013–2025) if pre-trained model files are not found.
+Training takes ~60 seconds and is cached for the duration of the session.
 """
 
 from pathlib import Path
-import io
 import sys
+import tempfile
 
 import numpy as np
 import pandas as pd
@@ -40,9 +44,6 @@ from src.beam.action_matrix import get_beam_actions, format_beam_report
 
 
 # ── Constants ─────────────────────────────────────────────────────────────────
-
-MODEL_PATH = ROOT / "models" / "random_forest.pkl"
-CALIBRATOR_PATH = ROOT / "models" / "random_forest_calibrator.pkl"
 
 COLOUR_HEX = {
     "Green":  "#2e8b57",
@@ -93,17 +94,68 @@ FEATURE_RANGES = {
 }
 
 
-# ── Model loading (cached) ────────────────────────────────────────────────────
+# ── Model loading / auto-training (cached) ────────────────────────────────────
 
-@st.cache_resource(show_spinner=False)
-def load_models():
-    """Load trained Random Forest pipeline and isotonic calibrator."""
-    if not MODEL_PATH.exists():
-        return None, None
+# Use a writable temp directory for models when running on Streamlit Cloud
+# (the repo root may be read-only in cloud environments)
+_MODELS_DIR = ROOT / "models"
+if not _MODELS_DIR.exists():
+    try:
+        _MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        _MODELS_DIR = Path(tempfile.gettempdir()) / "beacon_models"
+        _MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+MODEL_PATH = _MODELS_DIR / "random_forest.pkl"
+CALIBRATOR_PATH = _MODELS_DIR / "random_forest_calibrator.pkl"
+
+
+def _train_models_from_synthetic() -> tuple:
+    """Train Random Forest + calibrator on 2,000 synthetic orgs. ~45–90 s."""
     import joblib
+    import src.models.train as _train_mod
+    from src.ingestion.synthetic_data import generate_synthetic_990
+    from src.ingestion.cleaning_pipeline import run_cleaning_pipeline
+
+    # Redirect the training module's MODEL_DIR to our writable directory
+    _orig_model_dir = _train_mod.MODEL_DIR
+    _train_mod.MODEL_DIR = _MODELS_DIR
+
+    try:
+        df_raw = generate_synthetic_990(n_orgs=2000, seed=42)
+        df_clean = run_cleaning_pipeline(df_raw)
+        _train_mod.train_and_evaluate(df_clean)
+    finally:
+        _train_mod.MODEL_DIR = _orig_model_dir
+
     pipeline = joblib.load(MODEL_PATH)
     calibrator = joblib.load(CALIBRATOR_PATH) if CALIBRATOR_PATH.exists() else None
     return pipeline, calibrator
+
+
+@st.cache_resource(show_spinner=False)
+def load_models():
+    """
+    Return (pipeline, calibrator).  If saved models don't exist, train them
+    on synthetic data and cache the result for the rest of the session.
+    """
+    import joblib
+    if MODEL_PATH.exists():
+        pipeline = joblib.load(MODEL_PATH)
+        calibrator = joblib.load(CALIBRATOR_PATH) if CALIBRATOR_PATH.exists() else None
+        return pipeline, calibrator
+
+    # Auto-train with a visible progress message
+    with st.spinner(
+        "First launch: training BEACON models on 2,000 synthetic nonprofits "
+        "(Random Forest + isotonic calibration). This takes ~60 seconds and "
+        "won't repeat for this session…"
+    ):
+        try:
+            return _train_models_from_synthetic()
+        except Exception as exc:
+            st.error(f"Model training failed: {exc}")
+            return None, None
 
 
 @st.cache_resource(show_spinner=False)
@@ -375,16 +427,9 @@ def main():
             "associations, not audit opinions or legal determinations."
         )
 
-    # ── Load models ────────────────────────────────────────────────────────────
+    # ── Load models (auto-trains on first launch if not cached) ───────────────
     pipeline, calibrator = load_models()
     models_loaded = pipeline is not None
-
-    if not models_loaded:
-        st.warning(
-            "**Models not found.** Run `python run_beacon.py` from the repo root "
-            "to train and save models, then restart the dashboard.",
-            icon="⚠️",
-        )
 
     # ── Explainer (lazy) ───────────────────────────────────────────────────────
     explainer = load_shap_explainer(pipeline) if models_loaded else None
