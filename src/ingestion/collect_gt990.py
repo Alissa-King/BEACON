@@ -77,13 +77,14 @@ S3_INDEX = (
     "index_all_years_efiledata_xmls_created_on_2026-06-04.parquet"
 )
 
-# IRS BMF CSV files — one per region (eo1–eo4 cover all 50 states)
-IRS_BMF_URLS = [
-    "https://www.irs.gov/pub/irs-soi/eo1.csv",
-    "https://www.irs.gov/pub/irs-soi/eo2.csv",
-    "https://www.irs.gov/pub/irs-soi/eo3.csv",
-    "https://www.irs.gov/pub/irs-soi/eo4.csv",
-]
+# IRS BMF — hosted in the GivingTuesday data lake (same S3 bucket, no auth needed)
+S3_BMF = (
+    "s3://gt990datalake-rawdata/EfileData/BMF/IRS_BMF_2025_12_23_raw.csv"
+)
+S3_BMF_HTTP = (
+    "https://gt990datalake-rawdata.s3.amazonaws.com/EfileData/BMF/"
+    "IRS_BMF_2025_12_23_raw.csv"
+)
 
 IRS_NS = "http://www.irs.gov/efile"  # XML namespace for all IRS e-file returns
 
@@ -99,33 +100,20 @@ REQUEST_DELAY = 0.1   # seconds between requests per worker
 
 # ── BMF loading ───────────────────────────────────────────────────────────────
 
-def _download_bmf(url: str) -> pd.DataFrame | None:
-    """Download one IRS BMF CSV and return a minimal EIN→NTEE mapping."""
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "BEACON/1.0 academic research"})
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            content = resp.read().decode("latin-1", errors="replace")
-        df = pd.read_csv(io.StringIO(content), usecols=["EIN", "NTEE_CD"], dtype=str)
-        df.columns = ["ein", "ntee_code"]
-        return df
-    except Exception as exc:
-        print(f"  Warning: could not download {url}: {exc}")
-        return None
-
-
-def load_bmf(bmf_files: list[str] | None = None) -> pd.DataFrame:
+def load_bmf(bmf_files: list[str] | None = None, bmf_cache: str | None = None) -> pd.DataFrame:
     """
     Return DataFrame with columns [ein, ntee_code] for NTEE L and P only.
 
     Parameters
     ----------
-    bmf_files : local CSV paths to pre-downloaded BMF files, or None to
-                download from IRS automatically.
+    bmf_files : local CSV path(s) to pre-downloaded BMF file(s). If None,
+                downloads the consolidated BMF from the GivingTuesday S3 bucket
+                (same public bucket as the 990 data, no credentials needed).
+    bmf_cache : local path to cache the downloaded BMF (avoids re-download).
     """
-    frames = []
-
     if bmf_files:
         print(f"Loading {len(bmf_files)} local BMF file(s)…")
+        frames = []
         for f in bmf_files:
             try:
                 df = pd.read_csv(f, usecols=["EIN", "NTEE_CD"], dtype=str)
@@ -133,31 +121,37 @@ def load_bmf(bmf_files: list[str] | None = None) -> pd.DataFrame:
                 frames.append(df)
             except Exception as exc:
                 print(f"  Warning: {f}: {exc}")
+        if not frames:
+            raise RuntimeError(f"Could not load any BMF files from: {bmf_files}")
+        bmf_raw = pd.concat(frames, ignore_index=True)
     else:
-        print("Downloading IRS BMF files (4 files, ~300 MB total)…")
-        print("  (Download directly from https://www.irs.gov/charities-non-profits/"
-              "exempt-organizations-business-master-file-extract-eo-bmf if this fails)")
-        for url in IRS_BMF_URLS:
-            print(f"  {url}")
-            df = _download_bmf(url)
-            if df is not None:
-                frames.append(df)
+        cache_path = Path(bmf_cache) if bmf_cache else None
+        if cache_path and cache_path.exists():
+            print(f"Loading BMF from cache: {cache_path}")
+            bmf_raw = pd.read_csv(cache_path, usecols=["EIN", "NTEE_CD"], dtype=str)
+        else:
+            print(f"Downloading IRS BMF from GivingTuesday S3 (~317 MB, one-time)…")
+            print(f"  {S3_BMF_HTTP}")
+            import subprocess
+            dest = str(cache_path) if cache_path else "/tmp/beacon_bmf.csv"
+            result = subprocess.run(
+                ["aws", "s3", "cp", S3_BMF, dest, "--no-sign-request"],
+                capture_output=True, text=True,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"BMF download failed: {result.stderr}\n"
+                    "Install AWS CLI: pip install awscli\n"
+                    "Or pass a local file via --bmf-files."
+                )
+            bmf_raw = pd.read_csv(dest, usecols=["EIN", "NTEE_CD"], dtype=str)
+        bmf_raw.columns = ["ein", "ntee_code"]
 
-    if not frames:
-        raise RuntimeError(
-            "No BMF data loaded. Download the IRS BMF CSV files manually from:\n"
-            "  https://www.irs.gov/charities-non-profits/"
-            "exempt-organizations-business-master-file-extract-eo-bmf\n"
-            "Then pass them via --bmf-files eo1.csv eo2.csv eo3.csv eo4.csv"
-        )
-
-    bmf = pd.concat(frames, ignore_index=True)
-    bmf["ein"] = bmf["ein"].astype(str).str.strip().str.zfill(9)
-    # Keep only first letter of NTEE code for matching
-    bmf["ntee_major"] = bmf["ntee_code"].str[0].str.upper()
-    bmf = bmf[bmf["ntee_major"].isin(NTEE_TARGET)].copy()
-    bmf = bmf.drop_duplicates("ein")
-    print(f"BMF: {len(bmf):,} NTEE L/P organizations found.")
+    bmf_raw["ein"] = bmf_raw["ein"].astype(str).str.strip().str.zfill(9)
+    bmf_raw["ntee_major"] = bmf_raw["ntee_code"].fillna("").str[0].str.upper()
+    bmf = bmf_raw[bmf_raw["ntee_major"].isin(NTEE_TARGET)].drop_duplicates("ein").copy()
+    print(f"BMF: {len(bmf):,} NTEE L/P organizations "
+          f"(L={( bmf['ntee_major']=='L').sum():,}, P={(bmf['ntee_major']=='P').sum():,}).")
     return bmf[["ein", "ntee_major"]].rename(columns={"ntee_major": "ntee_code"})
 
 
@@ -415,6 +409,7 @@ def _compute_consecutive_deficits(df: pd.DataFrame) -> pd.DataFrame:
 def collect(
     out_path: Path,
     bmf_files: list[str] | None = None,
+    bmf_cache: str | None = None,
     index_cache: str | None = None,
     max_orgs: int | None = None,
     max_workers: int = MAX_WORKERS,
@@ -425,13 +420,14 @@ def collect(
     Parameters
     ----------
     out_path    : destination CSV path
-    bmf_files   : local IRS BMF CSV files (downloaded from IRS if None)
-    index_cache : local path to save/load the GT index parquet
+    bmf_files   : local IRS BMF CSV file(s); if None, downloads from S3
+    bmf_cache   : local path to cache the downloaded BMF (avoids re-download)
+    index_cache : local path to save/load the GT index parquet (~1.4 GB)
     max_orgs    : cap on number of unique EINs to process (None = all)
     max_workers : parallel XML download threads
     """
     # Step 1: load BMF → EIN→NTEE mapping
-    bmf = load_bmf(bmf_files)
+    bmf = load_bmf(bmf_files, bmf_cache)
 
     # Step 2: load GT index → list of 990 filings with URLs
     idx = load_index(index_cache)
@@ -511,7 +507,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--bmf-files", nargs="+", metavar="CSV",
-        help="Local IRS BMF CSV files. If omitted, downloads from IRS automatically.",
+        help="Local IRS BMF CSV file(s). If omitted, downloads consolidated BMF "
+             "from the GivingTuesday S3 bucket automatically (~317 MB).",
+    )
+    parser.add_argument(
+        "--bmf-cache", metavar="CSV",
+        help="Local path to cache/load the downloaded BMF CSV (avoids re-download).",
     )
     parser.add_argument(
         "--index-cache", metavar="PARQUET",
@@ -530,6 +531,7 @@ if __name__ == "__main__":
     collect(
         out_path=Path(args.out),
         bmf_files=args.bmf_files,
+        bmf_cache=args.bmf_cache,
         index_cache=args.index_cache,
         max_orgs=args.max_orgs,
         max_workers=args.workers,
