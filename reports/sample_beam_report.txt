@@ -1,0 +1,28 @@
+======================================================================
+BEACON FINANCIAL RESILIENCE REPORT
+======================================================================
+Organization : NP_Org_01461
+BDI Score    : 25.5 / 100
+Category     : RED
+
+PRIMARY RISK DRIVERS (XAI / SHAP)
+----------------------------------------
+  1. Months of Cash on Hand [SHAP: +0.436] — increases distress risk
+  2. Debt-to-Equity Ratio [SHAP: +0.370] — increases distress risk
+  3. Revenue HHI (Concentration) [SHAP: +0.235] — increases distress risk
+
+BEAM EXECUTIVE ACTIONS
+----------------------------------------
+  [1] Risk Driver: Months of Cash on Hand
+      Executive: Enact 90-day cash flow forecasting; draw on lines of credit; freeze non-essential hiring and capital expenditures.
+      Board    : Mandate bi-weekly liquidity updates from the CFO; review reserve policies; form emergency finance committee.
+
+  [2] Risk Driver: Debt-to-Equity Ratio
+      Executive: Renegotiate debt terms; prioritize debt reduction in the annual budget; defer capital projects until ratio improves.
+      Board    : Establish a debt ceiling policy; require CFO to report debt-to-equity quarterly alongside standard financials.
+
+  [3] Risk Driver: Revenue HHI (Concentration)
+      Executive: Develop a revenue diversification plan targeting at least 3 independent revenue streams within 18 months.
+      Board    : Commission a revenue sustainability audit; set board-level diversification targets as a KPI in the CEO evaluation.
+
+======================================================================

@@ -10,5 +10,4 @@ data/raw/
 data/synthetic/
 data/processed/
 models/
-reports/figures/
 .ipynb_checkpoints/
