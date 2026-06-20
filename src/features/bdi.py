@@ -1,7 +1,7 @@
 """
 BEACON Distress Index (BDI) — defense-ready definition.
 
-The BDI is a calibrated transformation of the XGBoost model's predicted
+The BDI is a calibrated transformation of the Random Forest model's predicted
 probability of financial distress:
 
     BDI = 100 × P(Distress | X)_calibrated

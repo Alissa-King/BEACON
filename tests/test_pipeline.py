@@ -16,6 +16,7 @@ from src.features.bdi import (
 )
 from src.features.labeling import compute_labels
 from src.models.calibration import fit_calibrator, calibrate, brier_score
+from src.models.train import TRAIN_YEARS, CALIBRATION_YEARS, TEST_YEARS
 from src.beam.action_matrix import get_beam_actions, format_beam_report
 
 
@@ -32,9 +33,17 @@ def fake_probs(sample_df):
 
 class TestSyntheticData:
     def test_row_count(self):
-        # 11 fiscal years per org; last 2 dropped per org (right-censored) → 9 per org
+        # 13 fiscal years per org (2013–2025); last 2 dropped (right-censored) → 11 per org
         df = generate_synthetic_990(n_orgs=50, seed=1)
-        assert len(df) == 50 * 9
+        assert len(df) == 50 * 11
+
+    def test_temporal_split_partitions_all_nonempty(self):
+        """All three temporal partitions must have rows after right-censoring."""
+        df = generate_synthetic_990(n_orgs=100, seed=5)
+        assert len(df[df["fiscal_year"].isin(TRAIN_YEARS)]) > 0, "Train set empty"
+        assert len(df[df["fiscal_year"].isin(CALIBRATION_YEARS)]) > 0, "Cal set empty"
+        assert len(df[df["fiscal_year"].isin(TEST_YEARS)]) > 0, \
+            "Test set empty — FISCAL_YEARS does not extend far enough for right-censored labels"
 
     def test_required_columns(self):
         df = generate_synthetic_990(n_orgs=10, seed=2)

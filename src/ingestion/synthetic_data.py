@@ -23,7 +23,7 @@ STATES = [
     "CA", "TX", "NY", "FL", "IL", "PA", "OH", "GA", "NC", "MI",
     "NJ", "VA", "WA", "AZ", "MA", "TN", "IN", "MO", "MD", "WI",
 ]
-FISCAL_YEARS = list(range(2013, 2024))
+FISCAL_YEARS = list(range(2013, 2026))  # extends to 2025 so 2022-2023 can be labeled
 
 
 def _generate_org_base(n_orgs: int, seed: int) -> pd.DataFrame:
@@ -86,7 +86,13 @@ def generate_synthetic_990(n_orgs: int = 2000, seed: int = 42) -> pd.DataFrame:
             total_liabilities = total_expenses * rng.uniform(0.1 + 0.3 * risk, 0.5 + 0.6 * risk)
             net_assets_hi = max(0.10, 0.8 * (1 - risk))
             total_net_assets = np.maximum(total_revenue * rng.uniform(0.05, net_assets_hi), 1)
-            unrestricted_net_assets = total_net_assets * rng.uniform(0.3, 0.9)
+            # High-risk orgs can have negative unrestricted net assets (accumulated deficits
+            # exceed the unrestricted pool; reflected in post-ASU 2016-14 990 reporting)
+            if risk > 0.65:
+                una_frac = rng.uniform(-0.25, 0.65)
+            else:
+                una_frac = rng.uniform(0.30, 0.90)
+            unrestricted_net_assets = total_net_assets * una_frac
             current_assets = total_expenses / 12 * (months_cash + rng.uniform(0, 2))
             current_liabilities = current_assets / np.clip(rng.lognormal(0.5, 0.4), 0.3, 10)
             current_ratio = current_assets / np.maximum(current_liabilities, 1)
@@ -97,7 +103,9 @@ def generate_synthetic_990(n_orgs: int = 2000, seed: int = 42) -> pd.DataFrame:
             weights = rng.dirichlet(np.ones(n_streams) * (1 - risk) * 3)
             # Ensure gov grants take their share
             weights[0] = gov_dep
-            weights[1:] = (1 - gov_dep) * weights[1:] / weights[1:].sum()
+            tail_sum = weights[1:].sum()
+            if tail_sum > 0:
+                weights[1:] = (1 - gov_dep) * weights[1:] / tail_sum
             hhi = float(np.sum(weights ** 2))
 
             debt_to_equity = total_liabilities / np.maximum(total_net_assets, 1)
