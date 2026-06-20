@@ -2,7 +2,7 @@
 BEACON Framework — master run script (defense-ready version).
 
 Pipeline (Section 3.3):
-  1.  Generate synthetic Form 990 panel (NTEE L/P, FY2013–2023)
+  1.  Load data — synthetic (default) or real (--real-data path/to/panel.csv)
   2.  Clean and preprocess (Appendix C)
   3.  Temporal split: TRAIN 2013-2019 | CAL 2020-2021 | TEST 2022-2023
   4.  Train Logistic Regression, Random Forest, XGBoost
@@ -11,8 +11,24 @@ Pipeline (Section 3.3):
   7.  Run SHAP explainability + domain-level decomposition
   8.  Generate all visualizations (ROC, PR, calibration, BDI, distress rates)
   9.  Print example BEAM report for a Severe Risk organization
+
+USING REAL DATA
+---------------
+1. Collect NCCS Core panel:
+     python -m src.ingestion.collect_nccs --auto-download --out data/raw/nccs_panel.csv
+
+   Or ProPublica (smaller, no registration required):
+     python -m src.ingestion.collect_propublica --max-orgs 5000 --out data/raw/propublica_panel.csv
+
+2. Run BEACON on the real panel:
+     python run_beacon.py --real-data data/raw/nccs_panel.csv
+
+The real-data CSV must already contain the forward-looking labels (financial_distress)
+produced by collect_nccs.py or collect_propublica.py. The cleaning pipeline
+handles imputation of any missing feature columns.
 """
 
+import argparse
 import json
 from pathlib import Path
 
@@ -42,16 +58,40 @@ from src.beam.action_matrix import get_beam_actions, format_beam_report
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Run BEACON pipeline")
+    parser.add_argument(
+        "--real-data", metavar="CSV_PATH", default=None,
+        help="Path to real-data panel CSV (from collect_nccs.py or collect_propublica.py). "
+             "If omitted, synthetic data is generated.",
+    )
+    parser.add_argument(
+        "--n-orgs", type=int, default=2000,
+        help="Number of synthetic orgs to generate (ignored when --real-data is set)",
+    )
+    args = parser.parse_args()
+
     Path("reports/figures").mkdir(parents=True, exist_ok=True)
     Path("models").mkdir(parents=True, exist_ok=True)
     Path("data/processed").mkdir(parents=True, exist_ok=True)
 
     # ── 1. Data ──────────────────────────────────────────────────────────────
     print("=" * 60)
-    print("STEP 1: Generating synthetic IRS Form 990 dataset")
-    print("=" * 60)
-    df_raw = generate_synthetic_990(n_orgs=2000, seed=42)
-    print(f"  Records: {len(df_raw):,} | Organizations: {df_raw['ein'].nunique():,}")
+    if args.real_data:
+        print(f"STEP 1: Loading real IRS Form 990 panel from {args.real_data}")
+        print("=" * 60)
+        df_raw = pd.read_csv(args.real_data)
+        df_raw["ein"] = df_raw["ein"].astype(str).str.strip()
+        df_raw["fiscal_year"] = df_raw["fiscal_year"].astype(int)
+        print(
+            f"  Records: {len(df_raw):,} | Organizations: {df_raw['ein'].nunique():,}\n"
+            f"  Distress rate (Option 1): {df_raw['financial_distress'].mean():.1%}\n"
+            f"  Fiscal years: {sorted(df_raw['fiscal_year'].unique())}"
+        )
+    else:
+        print("STEP 1: Generating synthetic IRS Form 990 dataset")
+        print("=" * 60)
+        df_raw = generate_synthetic_990(n_orgs=args.n_orgs, seed=42)
+        print(f"  Records: {len(df_raw):,} | Organizations: {df_raw['ein'].nunique():,}")
 
     # ── 2. Clean ─────────────────────────────────────────────────────────────
     print("\nSTEP 2: Running cleaning pipeline")
