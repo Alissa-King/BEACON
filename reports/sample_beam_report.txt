@@ -1,8 +1,8 @@
 ======================================================================
 BEACON FINANCIAL RESILIENCE REPORT
 ======================================================================
-Organization : NP_Org_01961
-BDI Score    : 90.2 / 100  (0 = Low Risk → 100 = Severe Risk)
+Organization : EIN 223265024
+BDI Score    : 100.0 / 100  (0 = Low Risk → 100 = Severe Risk)
 Category     : SEVERE RISK
 
 NOTE: BDI reflects predicted probability of financial distress
@@ -11,23 +11,23 @@ are associative predictors of model output, not causal factors.
 
 PRIMARY RISK DRIVERS (SHAP Explanatory Decomposition)
 ----------------------------------------
-  1. Debt-to-Equity Ratio [SHAP: +0.103] — increases distress risk
-  2. Unrestricted Net Assets Ratio [SHAP: +0.072] — increases distress risk
-  3. Months of Cash on Hand [SHAP: +0.039] — increases distress risk
+  1. Operating Margin [SHAP: +0.177] — increases distress risk
+  2. Consecutive Deficits [SHAP: +0.080] — increases distress risk
+  3. Debt-to-Equity Ratio [SHAP: +0.072] — increases distress risk
 
 BEAM GOVERNANCE RESPONSE TAXONOMY
 (decision support — professional judgment required)
 ----------------------------------------
-  [1] Risk Association: Debt-to-Equity Ratio
+  [1] Risk Association: Operating Margin
+      Executive: Conduct immediate expense review; identify cost reduction opportunities; present a break-even recovery timeline.
+      Board    : Require management to submit a 90-day operational recovery plan; pause major strategic initiatives until margin stabilizes.
+
+  [2] Risk Association: Consecutive Deficits
+      Executive: Conduct immediate programmatic profitability analysis; sunset chronically underfunded programs.
+      Board    : Demand a balanced budget recovery plan within 30 days; restrict usage of board-designated reserves to cover structural deficits.
+
+  [3] Risk Association: Debt-to-Equity Ratio
       Executive: Renegotiate debt terms; prioritize debt reduction in the annual budget; defer capital projects until ratio improves.
       Board    : Establish a debt ceiling policy; require CFO to report debt-to-equity quarterly alongside standard financials.
-
-  [2] Risk Association: Unrestricted Net Assets Ratio
-      Executive: Reduce administrative overhead; renegotiate vendor contracts; launch targeted operational fundraising.
-      Board    : Review long-term strategic plan viability; consider feasibility of strategic partnerships or mergers.
-
-  [3] Risk Association: Months of Cash on Hand
-      Executive: Enact 90-day cash flow forecasting; draw on lines of credit; freeze non-essential hiring and capital expenditures.
-      Board    : Mandate bi-weekly liquidity updates from the CFO; review reserve policies; form an emergency finance committee.
 
 ======================================================================
