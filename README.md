@@ -66,8 +66,8 @@ IRS Form 990 Data
 |---|---|
 | **BDI = calibrated probability × 100** | Statistically grounded; avoids arbitrary composite weights; tied directly to observed distress frequencies |
 | **Temporal holdout split** (not random k-fold) | Prevents data leakage; simulates real forecasting conditions |
-| **Isotonic regression calibration** | Ensures probability estimates reflect true observed risk rates (Brier score improvement: 0.229 → 0.195) |
-| **SHAP for explainability** | Post-hoc associative interpretation only — no causal claims |
+| **Random Forest as primary model** | Highest holdout AUC-ROC (0.717); isotonic calibration on held-out FY2020–2021 (Brier: 0.229 → 0.195) |
+| **SHAP for explainability** | Post-hoc associative interpretation only — no causal claims; TreeExplainer applied to Random Forest |
 | **BEAM as decision taxonomy** | Maps risk signals to governance responses; explicitly not a validated intervention model |
 
 ---
@@ -177,10 +177,12 @@ Fiscal Years:   2013  2014  2015  2016  2017  2018  2019 │ 2020  2021 │ 2022
 | Model | Accuracy | Precision | Recall | F1 | AUC-ROC | Avg. Precision |
 |---|---|---|---|---|---|---|
 | Logistic Regression | 0.648 | 0.451 | 0.679 | 0.542 | 0.705 | 0.482 |
-| Random Forest | 0.649 | 0.454 | 0.708 | 0.553 | **0.717** | 0.495 |
+| **Random Forest** *(primary)* | **0.649** | **0.454** | **0.708** | **0.553** | **0.717** | **0.495** |
 | XGBoost | 0.622 | 0.428 | 0.690 | 0.529 | 0.689 | 0.461 |
 
-XGBoost Brier Score: 0.229 (raw) → **0.195** (after isotonic calibration)
+Random Forest Brier Score: 0.229 (raw) → **0.195** (after isotonic calibration)
+
+Random Forest is selected as the primary BDI model based on highest holdout AUC-ROC (0.717). XGBoost is reported as a robustness benchmark. SHAP TreeExplainer is applied to the Random Forest model.
 
 ### BDI Predictive Validity
 

@@ -11,8 +11,8 @@ k-fold, to respect temporal ordering and prevent data leakage.
 
 Three models evaluated (Section 3.6):
   Logistic Regression   baseline / interpretable reference
-  Random Forest         nonlinear benchmark
-  XGBoost               primary model (calibrated, SHAP-explained)
+  Random Forest         primary model (highest AUC; calibrated, SHAP-explained)
+  XGBoost               secondary nonlinear benchmark
 
 Metrics (Section 3.7):
   AUC-ROC            primary discrimination metric
@@ -20,8 +20,10 @@ Metrics (Section 3.7):
   F1 Score           harmonic mean of precision and recall
   Brier Score        calibration quality (added per committee recommendation)
 
-The XGBoost model output is calibrated via isotonic regression on the
-calibration set before BDI scores are computed.
+The Random Forest model output is calibrated via isotonic regression on the
+calibration set before BDI scores are computed. Random Forest achieves the
+highest holdout AUC (0.717 vs. XGBoost 0.689) and is therefore selected as
+the primary BDI model. XGBoost is reported as a robustness comparison.
 """
 
 import json
@@ -246,12 +248,12 @@ def train_and_evaluate(df: pd.DataFrame) -> dict:
         # Final fit on full training window
         pipeline.fit(X_train, y_train)
 
-        # Calibrate XGBoost only (primary model)
+        # Calibrate Random Forest only (primary model — highest holdout AUC)
         calibrator = None
-        if name == "xgboost":
+        if name == "random_forest":
             raw_cal_probs = pipeline.predict_proba(X_cal)[:, 1]
             calibrator = fit_calibrator(raw_cal_probs, y_cal.values)
-            joblib.dump(calibrator, MODEL_DIR / "xgboost_calibrator.pkl")
+            joblib.dump(calibrator, MODEL_DIR / "random_forest_calibrator.pkl")
             print("  Calibrated with isotonic regression on FY2020–2021")
 
         # Evaluate on time-based holdout test set

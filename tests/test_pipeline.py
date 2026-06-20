@@ -14,6 +14,7 @@ from src.features.bdi import (
     compute_bdi,
     CATEGORY_TO_COLOUR,
 )
+from src.features.labeling import compute_labels
 from src.models.calibration import fit_calibrator, calibrate, brier_score
 from src.beam.action_matrix import get_beam_actions, format_beam_report
 
@@ -31,8 +32,9 @@ def fake_probs(sample_df):
 
 class TestSyntheticData:
     def test_row_count(self):
+        # 11 fiscal years per org; last 2 dropped per org (right-censored) → 9 per org
         df = generate_synthetic_990(n_orgs=50, seed=1)
-        assert len(df) == 50 * 11
+        assert len(df) == 50 * 9
 
     def test_required_columns(self):
         df = generate_synthetic_990(n_orgs=10, seed=2)
@@ -47,6 +49,70 @@ class TestSyntheticData:
         df = generate_synthetic_990(n_orgs=500, seed=4)
         rate = df["financial_distress"].mean()
         assert 0.05 < rate < 0.65, f"Distress rate out of expected range: {rate:.2f}"
+
+
+class TestLabeling:
+    def _make_panel(self, margins: dict) -> pd.DataFrame:
+        """Build a minimal two-org panel from {ein: [margin_per_year]} dicts."""
+        rows = []
+        for ein, values in margins.items():
+            for yr, m in enumerate(values, start=2015):
+                rows.append({"ein": ein, "fiscal_year": yr, "operating_margin": m})
+        return pd.DataFrame(rows)
+
+    def test_labels_are_forward_looking(self):
+        """Label at T must reflect T+1 and T+2 — not T itself."""
+        df = self._make_panel({"EIN001": [-0.1, -0.2, -0.3, 0.1, 0.2]})
+        labeled = compute_labels(df)
+        # Year 2015 (T): margin T+1=-0.2, T+2=-0.3 → both negative → label=1
+        row_2015 = labeled[labeled["fiscal_year"] == 2015].iloc[0]
+        assert row_2015["financial_distress"] == 1
+        # Year 2016 (T): margin T+1=-0.3, T+2=+0.1 → not both negative → label=0
+        row_2016 = labeled[labeled["fiscal_year"] == 2016].iloc[0]
+        assert row_2016["financial_distress"] == 0
+
+    def test_right_censoring_drops_last_two_years(self):
+        """Last two years per org must be dropped (T+1 and T+2 unobservable)."""
+        df = self._make_panel({"EIN002": [0.1, -0.1, 0.2, -0.2, 0.05]})
+        labeled = compute_labels(df)
+        assert 2019 not in labeled["fiscal_year"].values
+        assert 2018 not in labeled["fiscal_year"].values
+        assert 2017 in labeled["fiscal_year"].values
+
+    def test_label_columns_present(self):
+        df = self._make_panel({"EIN003": [0.1, -0.1, 0.0, 0.2, 0.1]})
+        labeled = compute_labels(df)
+        for col in ["financial_distress", "financial_distress_2", "label_year_t1", "label_year_t2"]:
+            assert col in labeled.columns
+
+    def test_option2_negative_net_assets(self):
+        """Option 2 label fires if unrestricted_net_assets < 0 in T+1 or T+2."""
+        rows = []
+        for yr, (margin, una) in enumerate(
+            [(0.1, 100), (-0.05, -50), (0.05, 200), (0.02, 150), (0.03, 180)],
+            start=2015,
+        ):
+            rows.append({
+                "ein": "EIN004", "fiscal_year": yr,
+                "operating_margin": margin, "unrestricted_net_assets": una,
+            })
+        df = pd.DataFrame(rows)
+        labeled = compute_labels(df)
+        row_2015 = labeled[labeled["fiscal_year"] == 2015].iloc[0]
+        # T+1 (2016) has una=-50 → Option 2 label = 1
+        assert row_2015["financial_distress_2"] == 1
+
+    def test_synthetic_data_no_self_prediction(self):
+        """consecutive_deficits at year T must not directly determine the label at T."""
+        df = generate_synthetic_990(n_orgs=200, seed=99)
+        # The label is built from future years — confirm feature year == label year
+        # by checking that label_year_t1 corresponds to fiscal_year + 1
+        assert (df["label_year_t1"].notna()).any()
+        # Rows with consecutive_deficits=0 can still have distress=1 (if future goes bad)
+        cd0 = df[df["consecutive_deficits"] == 0]
+        assert cd0["financial_distress"].sum() > 0, (
+            "If labels were circular, no zero-streak year would ever be labeled distressed"
+        )
 
 
 class TestCleaningPipeline:

@@ -6,7 +6,7 @@ Pipeline (Section 3.3):
   2.  Clean and preprocess (Appendix C)
   3.  Temporal split: TRAIN 2013-2019 | CAL 2020-2021 | TEST 2022-2023
   4.  Train Logistic Regression, Random Forest, XGBoost
-  5.  Calibrate XGBoost with isotonic regression on CAL set
+  5.  Calibrate Random Forest with isotonic regression on CAL set (RF = primary model)
   6.  Compute BDI = 100 × calibrated P(distress) for full dataset
   7.  Run SHAP explainability + domain-level decomposition
   8.  Generate all visualizations (ROC, PR, calibration, BDI, distress rates)
@@ -77,8 +77,8 @@ def main():
 
     # ── 5. Compute calibrated BDI for full dataset ────────────────────────────
     print("\nSTEP 5: Computing calibrated BDI (100 × P(distress)_calibrated)")
-    pipeline = joblib.load("models/xgboost.pkl")
-    calibrator = joblib.load("models/xgboost_calibrator.pkl")
+    pipeline = joblib.load("models/random_forest.pkl")
+    calibrator = joblib.load("models/random_forest_calibrator.pkl")
 
     X_all = df_clean[BDI_FEATURE_COLUMNS]
     raw_probs = pipeline.predict_proba(X_all)[:, 1]

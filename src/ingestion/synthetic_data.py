@@ -4,11 +4,18 @@ Synthetic IRS Form 990 data generator for BEACON model development.
 Generates realistic nonprofit financial data mirroring NTEE Categories L and P,
 based on the variable definitions in Appendix B. Use this until real NCCS/IRS data
 is obtained.
+
+Self-prediction fix: all raw financials are generated first (all years), then
+forward-looking distress labels are applied in a second pass via compute_labels().
+The consecutive_deficits feature at year T reflects deficits through year T;
+the financial_distress label at year T is determined by what happens at T+1 and T+2.
 """
 
 import numpy as np
 import pandas as pd
 from pathlib import Path
+
+from src.features.labeling import compute_labels
 
 
 NTEE_CATEGORIES = ["L", "P"]
@@ -38,6 +45,10 @@ def generate_synthetic_990(n_orgs: int = 2000, seed: int = 42) -> pd.DataFrame:
 
     Returns one row per (org, fiscal_year) with all BEACON feature columns
     and a binary 'financial_distress' label.
+
+    Labels are forward-looking: financial_distress at year T is 1 if operating_margin
+    is negative in BOTH T+1 and T+2 (Option 1 / sustained deficit). Rows for the
+    last two years of each org are dropped (right-censored — no observable future).
     """
     rng = np.random.default_rng(seed)
     orgs = _generate_org_base(n_orgs, seed)
@@ -50,7 +61,6 @@ def generate_synthetic_990(n_orgs: int = 2000, seed: int = 42) -> pd.DataFrame:
         base_revenue = rng.lognormal(mean=13 + (1 - risk) * 2, sigma=1.2)
         base_gov_dep = np.clip(rng.beta(2 + 4 * risk, 2), 0.05, 0.99)
 
-        prev_margin = None
         deficit_streak = 0
 
         for year in FISCAL_YEARS:
@@ -95,17 +105,6 @@ def generate_synthetic_990(n_orgs: int = 2000, seed: int = 42) -> pd.DataFrame:
                 total_net_assets, 1
             )
 
-            # Distress label: binary within 24 months (look-forward implied)
-            distress_prob = (
-                0.05
-                + 0.6 * risk
-                + 0.2 * (months_cash < 1.5)
-                + 0.15 * (gov_dep > 0.75)
-                + 0.1 * (deficit_streak >= 2)
-            )
-            distress_prob = np.clip(distress_prob, 0, 1)
-            financial_distress = int(rng.random() < distress_prob * 0.6)
-
             records.append({
                 "ein": org["ein"],
                 "org_name": org["org_name"],
@@ -122,17 +121,20 @@ def generate_synthetic_990(n_orgs: int = 2000, seed: int = 42) -> pd.DataFrame:
                 "total_net_assets": total_net_assets,
                 "total_liabilities": total_liabilities,
                 "operating_margin": operating_margin,
-                "consecutive_deficits": deficit_streak,
+                "consecutive_deficits": deficit_streak,  # backward-looking: deficits through T
                 "gov_grant_concentration": gov_dep,
                 "revenue_hhi": hhi,
                 "debt_to_equity": debt_to_equity,
-                # Label
-                "financial_distress": financial_distress,
             })
-            prev_margin = operating_margin
 
     df = pd.DataFrame(records)
     df = df.sort_values(["ein", "fiscal_year"]).reset_index(drop=True)
+
+    # Apply forward-looking labels: financial_distress at T based on T+1 and T+2.
+    # This is the only place labels are assigned — no label information exists
+    # in the feature generation loop above.
+    df = compute_labels(df)
+
     return df
 
 

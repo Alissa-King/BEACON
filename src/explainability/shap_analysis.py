@@ -29,7 +29,7 @@ import shap
 from src.features.bdi import BDI_FEATURE_COLUMNS, SHAP_DOMAIN_MAP
 
 FIGURES_DIR = Path("reports/figures")
-MODEL_PATH = Path("models/xgboost.pkl")
+MODEL_PATH = Path("models/random_forest.pkl")
 
 FEATURE_LABELS = {
     "months_cash_on_hand": "Months of Cash on Hand",
@@ -44,7 +44,7 @@ FEATURE_LABELS = {
 
 
 def load_model_and_explainer(X_ref: pd.DataFrame):
-    """Load fitted XGBoost pipeline and build a TreeExplainer."""
+    """Load fitted Random Forest pipeline and build a TreeExplainer."""
     pipeline = joblib.load(MODEL_PATH)
     clf = pipeline.named_steps["clf"]
     scaler = pipeline.named_steps["scaler"]
@@ -112,7 +112,7 @@ def plot_shap_bar(shap_values: np.ndarray, X: pd.DataFrame) -> None:
     colors = plt.cm.RdYlGn_r(np.linspace(0.1, 0.9, len(importance_df)))
     ax.barh(importance_df["feature"], importance_df["mean_shap"], color=colors)
     ax.set_xlabel("Mean |SHAP Value| — contribution to P(Distress)", fontsize=11)
-    ax.set_title("Global Feature Importance (SHAP) — XGBoost", fontsize=12)
+    ax.set_title("Global Feature Importance (SHAP) — Random Forest", fontsize=12)
     ax.tick_params(labelsize=9)
     plt.tight_layout()
     path = FIGURES_DIR / "shap_importance.png"
