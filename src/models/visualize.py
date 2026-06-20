@@ -119,8 +119,8 @@ def plot_calibration_curve(df: pd.DataFrame) -> None:
     X_cal = df.loc[cal_mask, BDI_FEATURE_COLUMNS]
     y_cal = df.loc[cal_mask, "financial_distress"].astype(int)
 
-    pipeline = joblib.load(Path("models/xgboost.pkl"))
-    calibrator = joblib.load(Path("models/xgboost_calibrator.pkl"))
+    pipeline = joblib.load(Path("models/random_forest.pkl"))
+    calibrator = joblib.load(Path("models/random_forest_calibrator.pkl"))
 
     raw_probs = pipeline.predict_proba(X_cal)[:, 1]
     cal_probs = calibrator.transform(raw_probs)
