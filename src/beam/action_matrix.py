@@ -183,7 +183,7 @@ def format_beam_report(
         "=" * 70,
         f"Organization : {org_name}",
         f"BDI Score    : {bdi_score:.1f} / 100  "
-        f"(0 = Low Risk → 100 = Severe Risk)",
+        f"(0 = Low Risk -> 100 = Severe Risk)",
         f"Category     : {bdi_category.upper()}",
         "",
         "NOTE: BDI reflects predicted probability of financial distress",

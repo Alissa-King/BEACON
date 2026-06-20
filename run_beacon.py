@@ -165,7 +165,7 @@ def main():
     )
     print("\n" + report)
 
-    Path("reports/sample_beam_report.txt").write_text(report)
+    Path("reports/sample_beam_report.txt").write_text(report, encoding="utf-8")
     print("Saved sample BEAM report to reports/sample_beam_report.txt")
     print("\nAll outputs in models/ and reports/. Done.")
 
