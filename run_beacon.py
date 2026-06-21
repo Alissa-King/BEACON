@@ -50,8 +50,6 @@ from src.models.visualize import (
 )
 from src.explainability.shap_analysis import (
     run_shap_analysis,
-    load_model_and_explainer,
-    compute_shap_values,
     get_org_shap_drivers,
 )
 from src.beam.action_matrix import get_beam_actions, format_beam_report
@@ -134,7 +132,7 @@ def main():
 
     # ── 6. SHAP analysis ──────────────────────────────────────────────────────
     print("\nSTEP 6: SHAP explainability + domain decomposition")
-    shap_values, explainer = run_shap_analysis(df_clean)
+    shap_values, explainer_obj = run_shap_analysis(df_clean)
 
     # ── 7. Visualizations ────────────────────────────────────────────────────
     print("\nSTEP 7: Generating visualizations")
@@ -153,9 +151,7 @@ def main():
     sample = severe.iloc[0]
     sample_idx = df_clean.index.get_loc(sample.name)
 
-    explainer_obj, scaler, clf = load_model_and_explainer(X_all)
-    sv_sample = compute_shap_values(explainer_obj, scaler, X_all)
-    drivers = get_org_shap_drivers(sv_sample, sample_idx, top_n=3)
+    drivers = get_org_shap_drivers(shap_values, sample_idx, top_n=3)
     actions = get_beam_actions(drivers, str(sample["bdi_colour"]))
     report = format_beam_report(
         org_name=str(sample.get("org_name", f"EIN {sample.get('ein', '?')}")),
