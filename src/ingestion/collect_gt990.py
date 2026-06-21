@@ -413,6 +413,7 @@ def collect(
     index_cache: str | None = None,
     max_orgs: int | None = None,
     max_workers: int = MAX_WORKERS,
+    checkpoint: bool = True,
 ) -> pd.DataFrame:
     """
     Collect IRS e-file 990 data for NTEE L/P and build a BEACON-ready panel.
@@ -425,7 +426,10 @@ def collect(
     index_cache : local path to save/load the GT index parquet (~1.4 GB)
     max_orgs    : cap on number of unique EINs to process (None = all)
     max_workers : parallel XML download threads
+    checkpoint  : save progress every 500 records so a restart can resume
     """
+    checkpoint_path = Path(str(out_path).replace(".csv", "_checkpoint.csv"))
+
     # Step 1: load BMF → EIN→NTEE mapping
     bmf = load_bmf(bmf_files, bmf_cache)
 
@@ -440,33 +444,53 @@ def collect(
     if max_orgs is not None:
         selected_eins = idx["EIN"].unique()[:max_orgs]
         idx = idx[idx["EIN"].isin(selected_eins)]
-        print(f"Capped to {max_orgs:,} orgs → {len(idx):,} filings.")
+        print(f"Capped to {max_orgs:,} orgs -> {len(idx):,} filings.")
 
-    # Step 4: parallel XML download + parse
+    # Step 4: resume from checkpoint if one exists
+    rows = []
+    done_urls: set[str] = set()
+    if checkpoint and checkpoint_path.exists():
+        prior = pd.read_csv(checkpoint_path, dtype=str)
+        rows = prior.to_dict("records")
+        done_urls = set(prior.get("_url", pd.Series(dtype=str)).dropna())
+        print(f"Resuming from checkpoint: {len(rows):,} records already collected, "
+              f"{len(done_urls):,} URLs skipped.")
+
     tasks = [
         {"ein": row["EIN"], "ntee_code": row["ntee_code"], "url": row["URL"]}
         for _, row in idx.iterrows()
+        if row["URL"] not in done_urls
     ]
 
-    rows = []
     n_tasks = len(tasks)
+    n_total = len(idx)
     print(f"\nDownloading and parsing {n_tasks:,} XML files "
-          f"({max_workers} workers)…")
+          f"({n_total - n_tasks:,} already done, {max_workers} workers)...")
+
+    def _process_with_url(task: dict) -> dict | None:
+        result = _process_filing(task)
+        if result:
+            result["_url"] = task["url"]
+        return result
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {pool.submit(_process_filing, t): t for t in tasks}
+        futures = {pool.submit(_process_with_url, t): t for t in tasks}
         for i, future in enumerate(as_completed(futures), 1):
             result = future.result()
             if result:
                 rows.append(result)
             if i % 500 == 0 or i == n_tasks:
                 print(f"  {i:,}/{n_tasks:,} done — {len(rows):,} valid records")
+                if checkpoint and rows:
+                    pd.DataFrame(rows).to_csv(checkpoint_path, index=False)
 
     if not rows:
         print("No records collected.")
         return pd.DataFrame()
 
     df = pd.DataFrame(rows)
+    # Drop the internal tracking column before saving
+    df = df.drop(columns=["_url"], errors="ignore")
     df["ein"] = df["ein"].astype(str).str.strip().str.zfill(9)
 
     # Deduplicate — keep most complete row per (EIN, year)
@@ -484,8 +508,12 @@ def collect(
     out_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out_path, index=False)
 
+    # Remove checkpoint now that final file is written
+    if checkpoint and checkpoint_path.exists():
+        checkpoint_path.unlink()
+
     rate1 = df["financial_distress"].mean()
-    print(f"\nSaved {len(df):,} labeled rows for {df['ein'].nunique():,} orgs → {out_path}")
+    print(f"\nSaved {len(df):,} labeled rows for {df['ein'].nunique():,} orgs -> {out_path}")
     print(f"Option 1 distress rate: {rate1:.1%}")
     if df["financial_distress_2"].notna().any():
         print(f"Option 2 distress rate: {df['financial_distress_2'].mean():.1%}")
