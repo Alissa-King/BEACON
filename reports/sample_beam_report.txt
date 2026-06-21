@@ -1,8 +1,8 @@
 ======================================================================
 BEACON FINANCIAL RESILIENCE REPORT
 ======================================================================
-Organization : EIN 223265024
-BDI Score    : 100.0 / 100  (0 = Low Risk → 100 = Severe Risk)
+Organization : EIN 222873650
+BDI Score    : 87.7 / 100  (0 = Low Risk -> 100 = Severe Risk)
 Category     : SEVERE RISK
 
 NOTE: BDI reflects predicted probability of financial distress
@@ -11,9 +11,9 @@ are associative predictors of model output, not causal factors.
 
 PRIMARY RISK DRIVERS (SHAP Explanatory Decomposition)
 ----------------------------------------
-  1. Operating Margin [SHAP: +0.177] — increases distress risk
-  2. Consecutive Deficits [SHAP: +0.080] — increases distress risk
-  3. Debt-to-Equity Ratio [SHAP: +0.072] — increases distress risk
+  1. Operating Margin [SHAP: +0.180] — increases distress risk
+  2. Consecutive Deficits [SHAP: +0.100] — increases distress risk
+  3. Gov. Grant Concentration [SHAP: +0.053] — increases distress risk
 
 BEAM GOVERNANCE RESPONSE TAXONOMY
 (decision support — professional judgment required)
@@ -26,8 +26,8 @@ BEAM GOVERNANCE RESPONSE TAXONOMY
       Executive: Conduct immediate programmatic profitability analysis; sunset chronically underfunded programs.
       Board    : Demand a balanced budget recovery plan within 30 days; restrict usage of board-designated reserves to cover structural deficits.
 
-  [3] Risk Association: Debt-to-Equity Ratio
-      Executive: Renegotiate debt terms; prioritize debt reduction in the annual budget; defer capital projects until ratio improves.
-      Board    : Establish a debt ceiling policy; require CFO to report debt-to-equity quarterly alongside standard financials.
+  [3] Risk Association: Gov. Grant Concentration
+      Executive: Launch a multi-year strategic initiative to build unrestricted individual giving and corporate sponsorships.
+      Board    : Require management to tie executive performance metrics to unrestricted revenue growth targets.
 
 ======================================================================
