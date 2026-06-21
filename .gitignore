@@ -9,5 +9,5 @@ build/
 data/raw/
 data/synthetic/
 data/processed/
-/models/
+/models/*.pkl
 .ipynb_checkpoints/
