@@ -159,12 +159,25 @@ def get_org_shap_drivers(
     ]
 
 
-def run_shap_analysis(df: pd.DataFrame) -> tuple[np.ndarray, object]:
+def run_shap_analysis(
+    df: pd.DataFrame, shap_sample_n: int = 5000
+) -> tuple[np.ndarray, object]:
     X = df[BDI_FEATURE_COLUMNS]
     explainer, scaler, clf = load_model_and_explainer(X)
-    shap_values = compute_shap_values(explainer, scaler, X)
-    domain_df = compute_shap_domain_contributions(shap_values, X)
-    plot_shap_summary(shap_values, X)
-    plot_shap_bar(shap_values, X)
+
+    # Subsample for global plots — SHAP on 300K+ rows takes hours
+    if len(X) > shap_sample_n:
+        X_sample = X.sample(n=shap_sample_n, random_state=42)
+        print(f"  SHAP: subsampling {shap_sample_n:,} of {len(X):,} rows for global plots")
+    else:
+        X_sample = X
+
+    shap_values = compute_shap_values(explainer, scaler, X_sample)
+    domain_df = compute_shap_domain_contributions(shap_values, X_sample)
+    plot_shap_summary(shap_values, X_sample)
+    plot_shap_bar(shap_values, X_sample)
     plot_shap_domain_contributions(domain_df)
-    return shap_values, explainer
+
+    # Return full-dataset SHAP values for per-org BEAM reports
+    shap_values_full = compute_shap_values(explainer, scaler, X)
+    return shap_values_full, explainer
