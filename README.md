@@ -221,6 +221,16 @@ Fiscal Years:   2013–2019 (195,443 obs)  |  2020–2021 (79,003 obs)  |  2022�
 
 Random Forest selected as primary BDI model (AUC-ROC 0.731, Brier 0.159 after isotonic calibration). SHAP TreeExplainer applied to Random Forest.
 
+### Robustness — NTEE Subgroup Analysis (FY2022–2023 Holdout)
+
+| Subgroup | n | Distress Rate | AUC-ROC | Avg. Precision |
+|---|---|---|---|---|
+| Overall | 32,751 | 27.3% | 0.731 | 0.596 |
+| NTEE L — Housing & Shelter | 9,468 | 39.0% | **0.844** | 0.802 |
+| NTEE P — Human Services | 23,283 | 22.5% | 0.643 | 0.388 |
+
+> NTEE L performance (AUC 0.844) substantially exceeds NTEE P (AUC 0.643). Housing nonprofits have more standardized balance sheet structures and higher base distress rates, making financial patterns more predictable. The weaker NTEE P performance is a documented limitation and direction for future model refinement.
+
 ### BDI Category Distribution (Full Panel, n=307,197)
 
 | BDI Category | Score Range | Organization-Year Obs |
@@ -274,7 +284,7 @@ This repository is the computational implementation of the following dissertatio
 ## Limitations
 
 1. **Data lag:** IRS Form 990 filings are inherently retrospective (filed 6–11 months post fiscal year-end). Real-time integration with accounting software would improve BDI precision.
-2. **Generalizability:** Models are trained exclusively on NTEE Categories L and P. Risk thresholds may not transfer to universities, hospitals, or arts organizations without retraining.
+2. **Generalizability:** Models are trained exclusively on NTEE Categories L and P. Within-scope performance differs by subgroup (NTEE L AUC 0.844 vs. NTEE P AUC 0.643), suggesting human services organizations warrant a dedicated model. Risk thresholds do not transfer to universities, hospitals, or arts organizations without retraining.
 3. **BEAM validation:** The BEAM action matrix is a decision taxonomy grounded in existing literature; it has not been validated as an intervention model in a longitudinal action research study.
 4. **Causal inference:** SHAP values are associative explanations of model behavior, not causal drivers of organizational failure.
 
