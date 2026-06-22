@@ -106,8 +106,41 @@ if not _MODELS_DIR.exists():
         _MODELS_DIR = Path(tempfile.gettempdir()) / "beacon_models"
         _MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
-MODEL_PATH = _MODELS_DIR / "random_forest.pkl"
+MODEL_PATH      = _MODELS_DIR / "random_forest.pkl"
 CALIBRATOR_PATH = _MODELS_DIR / "random_forest_calibrator.pkl"
+
+# GitHub Release containing real-data trained model artifacts.
+# Update RELEASE_TAG if you publish a new release.
+_RELEASE_BASE = "https://github.com/Alissa-King/BEACON/releases/download"
+RELEASE_TAG   = "v1.0-models"
+_RELEASE_FILES = [
+    "random_forest.pkl",
+    "random_forest_calibrator.pkl",
+    "cleaning_pipeline.pkl",
+    "logistic_regression.pkl",
+    "xgboost.pkl",
+]
+
+
+def _download_models_from_release() -> bool:
+    """
+    Download trained model artifacts from the GitHub Release.
+    Returns True if all required files were downloaded successfully.
+    """
+    import urllib.request
+    required = {"random_forest.pkl", "random_forest_calibrator.pkl"}
+    success  = True
+    for fname in _RELEASE_FILES:
+        dest = _MODELS_DIR / fname
+        if dest.exists():
+            continue
+        url = f"{_RELEASE_BASE}/{RELEASE_TAG}/{fname}"
+        try:
+            urllib.request.urlretrieve(url, dest)
+        except Exception:
+            if fname in required:
+                success = False
+    return success
 
 
 def _train_models_from_synthetic() -> tuple:
@@ -137,18 +170,33 @@ def _train_models_from_synthetic() -> tuple:
 @st.cache_resource(show_spinner=False)
 def load_models():
     """
-    Return (pipeline, calibrator).  If saved models don't exist, train them
-    on synthetic data and cache the result for the rest of the session.
+    Return (pipeline, calibrator).
+
+    Loading priority:
+      1. Pre-trained files already on disk (fastest — subsequent loads).
+      2. Download from GitHub Release (real IRS Form 990 trained models).
+      3. Fall back to training on 2,000 synthetic orgs (~60 s) if release
+         is unavailable (e.g. no internet or release not yet published).
     """
     import joblib
+
     if MODEL_PATH.exists():
-        pipeline = joblib.load(MODEL_PATH)
+        pipeline   = joblib.load(MODEL_PATH)
         calibrator = joblib.load(CALIBRATOR_PATH) if CALIBRATOR_PATH.exists() else None
         return pipeline, calibrator
 
-    # Auto-train with a visible progress message
+    # Try downloading real-data models from GitHub Release
+    with st.spinner("Downloading trained models from GitHub Release…"):
+        downloaded = _download_models_from_release()
+
+    if downloaded and MODEL_PATH.exists():
+        pipeline   = joblib.load(MODEL_PATH)
+        calibrator = joblib.load(CALIBRATOR_PATH) if CALIBRATOR_PATH.exists() else None
+        return pipeline, calibrator
+
+    # Fall back: train on synthetic data
     with st.spinner(
-        "First launch: training BEACON models on 2,000 synthetic nonprofits "
+        "Models not found in release — training on 2,000 synthetic nonprofits "
         "(Random Forest + isotonic calibration). This takes ~60 seconds and "
         "won't repeat for this session…"
     ):
