@@ -197,37 +197,38 @@ Fiscal Years:   2013  2014  2015  2016  2017  2018  2019 │ 2020  2021 │ 2022
 
 ---
 
-## Results (Synthetic Data)
+## Results (Real IRS Form 990 Data)
+
+**Dataset:** 307,197 organization-year observations | 46,472 unique organizations | FY2013–2023
+**Source:** GivingTuesday 990 Data Lake (IRS e-file XML) cross-referenced with IRS Business Master File
+**NTEE Scope:** Categories L (Housing & Shelter) and P (Human Services)
+**Distress rate:** 26.9% overall (Train 27.2% | Cal 25.8% | Test 27.3%)
+
+### Temporal Split
+
+```
+Fiscal Years:   2013–2019 (195,443 obs)  |  2020–2021 (79,003 obs)  |  2022–2023 (32,751 obs)
+                ------------ TRAIN -------|-------- CAL -------------|-------- TEST -----------
+```
 
 ### Model Performance — FY2022–2023 Holdout
 
-| Model | Accuracy | Precision | Recall | F1 | AUC-ROC | Avg. Precision |
-|---|---|---|---|---|---|---|
-| Logistic Regression | 0.648 | 0.451 | 0.679 | 0.542 | 0.705 | 0.482 |
-| **Random Forest** *(primary)* | **0.649** | **0.454** | **0.708** | **0.553** | **0.717** | **0.495** |
-| XGBoost | 0.622 | 0.428 | 0.690 | 0.529 | 0.689 | 0.461 |
+| Model | Accuracy | Precision | Recall | F1 | AUC-ROC | Avg. Precision | Brier |
+|---|---|---|---|---|---|---|---|
+| Logistic Regression | 0.728 | 0.501 | 0.531 | 0.516 | 0.722 | 0.573 | — |
+| **Random Forest** *(primary)* | **0.731** | **0.507** | **0.548** | **0.527** | **0.731** | **0.596** | **0.159** |
+| XGBoost | 0.744 | 0.531 | 0.523 | 0.527 | 0.734 | 0.603 | — |
 
-Random Forest Brier Score: 0.229 (raw) → **0.195** (after isotonic calibration)
+Random Forest selected as primary BDI model (AUC-ROC 0.731, Brier 0.159 after isotonic calibration). SHAP TreeExplainer applied to Random Forest.
 
-Random Forest is selected as the primary BDI model based on highest holdout AUC-ROC (0.717). XGBoost is reported as a robustness benchmark. SHAP TreeExplainer is applied to the Random Forest model.
+### BDI Category Distribution (Full Panel, n=307,197)
 
-### BDI Predictive Validity
-
-| BDI Category | Score Range | Observed Distress Rate |
+| BDI Category | Score Range | Organization-Year Obs |
 |---|---|---|
-| Severe Risk | 80–100 | 97.3% |
-| Elevated Risk | 60–79 | 87.4% |
-| Moderate Risk | 40–59 | 59.8% |
-| Low Risk | 0–39 | 12.7% |
-
-### Robustness (NTEE Subgroups)
-
-| Subgroup | AUC-ROC |
-|---|---|
-| NTEE L — Housing & Shelter | 0.702 |
-| NTEE P — Human Services | 0.706 |
-
-> All performance figures reflect synthetic data used for framework development. Final dissertation results will be reported on the actual NCCS/IRS Form 990 dataset.
+| Low Risk | 0–39 | 252,936 (82.3%) |
+| Moderate Risk | 40–59 | 19,653 (6.4%) |
+| Elevated Risk | 60–79 | 12,153 (4.0%) |
+| Severe Risk | 80–100 | 22,455 (7.3%) |
 
 ---
 
