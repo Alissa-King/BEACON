@@ -66,7 +66,7 @@ IRS Form 990 Data
 |---|---|
 | **BDI = calibrated probability × 100** | Statistically grounded; avoids arbitrary composite weights; tied directly to observed distress frequencies |
 | **Temporal holdout split** (not random k-fold) | Prevents data leakage; simulates real forecasting conditions |
-| **Random Forest as primary model** | Highest holdout AUC-ROC (0.717); isotonic calibration on held-out FY2020–2021 (Brier: 0.229 → 0.195) |
+| **Random Forest as primary model** | Highest holdout AUC-ROC (0.731); isotonic calibration on held-out FY2020–2021 (Brier: 0.229 → 0.159) |
 | **SHAP for explainability** | Post-hoc associative interpretation only — no causal claims; TreeExplainer applied to Random Forest |
 | **BEAM as decision taxonomy** | Maps risk signals to governance responses; explicitly not a validated intervention model |
 
@@ -192,7 +192,7 @@ Fiscal Years:   2013  2014  2015  2016  2017  2018  2019 │ 2020  2021 │ 2022
 ```
 
 - **Training (2013–2019):** Model fitting with 5-fold expanding-window TimeSeriesSplit CV
-- **Calibration (2020–2021):** Isotonic regression calibration of XGBoost probabilities
+- **Calibration (2020–2021):** Isotonic regression calibration of Random Forest probabilities
 - **Test / Holdout (2022–2023):** Final evaluation — never seen during training or calibration
 
 ---

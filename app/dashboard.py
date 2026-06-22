@@ -419,8 +419,8 @@ def main():
         st.caption(
             "Predicts financial distress for NTEE Category L (Housing & Shelter) "
             "and P (Human Services) nonprofits using 10 Form 990 features. "
-            "Primary model: Random Forest (AUC 0.722) with isotonic calibration "
-            "(Brier score 0.229 → 0.175)."
+            "Primary model: Random Forest (AUC 0.731) with isotonic calibration "
+            "(Brier score 0.229 → 0.159)."
         )
         st.caption(
             "⚠️ BEACON is a research prototype. BDI scores are predictive "
@@ -789,7 +789,7 @@ def main():
     st.caption(
         "BEACON v1.0 · Dissertation research prototype · "
         "Alissa King, DBA Candidate · "
-        "Model: Random Forest (primary, AUC 0.722) + Isotonic Calibration · "
+        "Model: Random Forest (primary, AUC 0.731) + Isotonic Calibration · "
         "Features: 10 Form 990 indicators · "
         "Scope: NTEE Categories L (Housing & Shelter) and P (Human Services) · "
         "⚠️ Not for audit, legal, or regulatory use."

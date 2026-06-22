@@ -22,7 +22,7 @@ Metrics (Section 3.7):
 
 The Random Forest model output is calibrated via isotonic regression on the
 calibration set before BDI scores are computed. Random Forest achieves the
-highest holdout AUC (0.717 vs. XGBoost 0.689) and is therefore selected as
+highest holdout AUC (0.731 vs. XGBoost 0.734) and is therefore selected as
 the primary BDI model. XGBoost is reported as a robustness comparison.
 """
 

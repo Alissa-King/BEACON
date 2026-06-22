@@ -17,7 +17,7 @@ from src.explainability.shap_analysis import (
     compute_shap_values,
 )
 
-MODEL_PATH = Path("models/xgboost.pkl")
+MODEL_PATH = Path("models/random_forest.pkl")
 
 
 def score_organizations(df: pd.DataFrame, top_drivers: int = 3) -> pd.DataFrame:
