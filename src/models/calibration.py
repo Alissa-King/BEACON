@@ -1,5 +1,5 @@
 """
-Probability calibration for the BEACON XGBoost model.
+Probability calibration for the BEACON Random Forest model.
 
 Uses isotonic regression (Platt scaling alternative) to ensure predicted
 distress probabilities reflect observed distress frequencies. An
