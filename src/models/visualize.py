@@ -107,7 +107,7 @@ def plot_precision_recall(df: pd.DataFrame) -> None:
 
 def plot_calibration_curve(df: pd.DataFrame) -> None:
     """
-    Reliability diagram comparing raw XGBoost probabilities to isotonic-
+    Reliability diagram comparing raw Random Forest probabilities to isotonic-
     calibrated probabilities against observed distress rates.
 
     A well-calibrated model's curve tracks the diagonal; systematic
@@ -129,8 +129,8 @@ def plot_calibration_curve(df: pd.DataFrame) -> None:
     ax.plot([0, 1], [0, 1], "k--", lw=1, label="Perfect calibration")
 
     for probs, label, color in [
-        (raw_probs, "XGBoost (uncalibrated)", "#e07b54"),
-        (cal_probs, "XGBoost + Isotonic Regression", "#2e8b57"),
+        (raw_probs, "Random Forest (uncalibrated)", "#e07b54"),
+        (cal_probs, "Random Forest + Isotonic Regression", "#2e8b57"),
     ]:
         fraction_pos, mean_pred = calibration_curve(y_cal, probs, n_bins=10)
         ax.plot(mean_pred, fraction_pos, "s-", lw=2, color=color, label=label)
@@ -139,7 +139,7 @@ def plot_calibration_curve(df: pd.DataFrame) -> None:
     ax.set_ylabel("Observed Distress Rate", fontsize=11)
     ax.set_title(
         "Reliability Diagram (Calibration Curve)\n"
-        "XGBoost before and after isotonic calibration",
+        "Random Forest before and after isotonic calibration",
         fontsize=12,
     )
     ax.legend(loc="upper left", fontsize=9)
