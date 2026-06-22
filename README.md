@@ -66,7 +66,7 @@ IRS Form 990 Data
 |---|---|
 | **BDI = calibrated probability × 100** | Statistically grounded; avoids arbitrary composite weights; tied directly to observed distress frequencies |
 | **Temporal holdout split** (not random k-fold) | Prevents data leakage; simulates real forecasting conditions |
-| **Random Forest as primary model** | Highest holdout AUC-ROC (0.731); isotonic calibration on held-out FY2020–2021 (Brier: 0.229 → 0.159) |
+| **Random Forest as primary model** | Prespecified before holdout evaluation for interpretability, calibration stability, and SHAP TreeExplainer compatibility; nearly equivalent AUC to XGBoost (0.731 vs. 0.734); isotonic calibration on held-out FY2020–2021 (Brier: 0.229 → 0.159) |
 | **SHAP for explainability** | Post-hoc associative interpretation only — no causal claims; TreeExplainer applied to Random Forest |
 | **BEAM as decision taxonomy** | Maps risk signals to governance responses; explicitly not a validated intervention model |
 
@@ -77,16 +77,24 @@ IRS Form 990 Data
 ```
 BEACON/
 ├── run_beacon.py                  # Master pipeline script
+├── generate_beam_report.py        # Standalone BEAM report generator
+├── ntee_subgroup_analysis.py      # Robustness: subgroup AUC by NTEE code
 ├── requirements.txt
+├── DATA_PROVENANCE.md             # Real-data source, filters, row counts, checksums
+├── REPRODUCE_RESULTS.md           # Commands to reproduce Chapter 4 results exactly
 │
 ├── src/
 │   ├── ingestion/
 │   │   ├── synthetic_data.py      # Synthetic Form 990 panel generator
-│   │   └── cleaning_pipeline.py   # Winsorization, imputation, alignment
+│   │   ├── cleaning_pipeline.py   # CleaningPipeline (fit-on-train), winsorize, impute
+│   │   ├── collect_nccs.py        # NCCS Core panel collector (primary data source)
+│   │   └── collect_propublica.py  # ProPublica 990 collector (supplemental)
 │   ├── features/
-│   │   └── bdi.py                 # BDI formula, domain map, risk categories
+│   │   ├── bdi.py                 # BDI formula, domain map, risk categories
+│   │   ├── labeling.py            # Forward-looking distress label logic
+│   │   └── variable_dictionary.py # Authoritative variable specs (Appendix B)
 │   ├── models/
-│   │   ├── train.py               # Temporal split, TimeSeriesSplit CV, training
+│   │   ├── train.py               # Temporal split, fiscal-year CV folds, training
 │   │   ├── calibration.py         # Isotonic regression calibrator, Brier score
 │   │   ├── predict.py             # Scoring pipeline for new organizations
 │   │   └── visualize.py           # ROC, PR, calibration, BDI plots
@@ -95,15 +103,26 @@ BEACON/
 │   └── beam/
 │       └── action_matrix.py       # BEAM matrix, report generator
 │
+├── app/
+│   └── dashboard.py               # Streamlit interactive dashboard
+│
 ├── tests/
 │   └── test_pipeline.py           # 21 unit + integration tests
 │
+├── models/                        # Trained artifact outputs (committed)
+│   ├── random_forest.pkl
+│   ├── logistic_regression.pkl
+│   ├── xgboost.pkl
+│   ├── random_forest_calibrator.pkl
+│   ├── cleaning_pipeline.pkl      # Training-fitted preprocessing object
+│   └── evaluation_report.json     # Full metrics (CV, holdout, robustness)
+│
 ├── data/
-│   └── processed/                 # Cleaned + scored panel (gitignored)
+│   └── processed/                 # Cleaned + scored panel (gitignored; size)
 │
 └── reports/
     ├── sample_beam_report.txt
-    └── figures/
+    └── figures/                   # 8 publication-ready plots (committed)
         ├── roc_curves.png
         ├── precision_recall.png
         ├── calibration_curve.png
@@ -152,6 +171,22 @@ streamlit run app/dashboard.py
 2. Go to [share.streamlit.io](https://share.streamlit.io) → **New app**
 3. Select your repo, branch `main`, main file: `app/dashboard.py`
 4. Click **Deploy** — the app trains its own models on first launch
+
+---
+
+## Data Note — Dashboard vs. Dissertation Results
+
+| Context | Data used | Where documented |
+|---|---|---|
+| **Dashboard demo** (Streamlit) | Synthetic data (2,000 orgs, generated on first launch) | `src/ingestion/synthetic_data.py` |
+| **Full pipeline demo** (`python run_beacon.py`) | Synthetic data by default; real data with `--real-data` flag | `run_beacon.py` |
+| **Chapter 4 dissertation results** | Real IRS Form 990 panel, 307,197 org-years, FY2013–2023 | `DATA_PROVENANCE.md` |
+
+The real dataset is not bundled in this repository due to size and license constraints.
+`DATA_PROVENANCE.md` documents the source, download date, filters, exclusions, row counts
+at each pipeline step, SHA-256 checksums, and the exact commands used to produce the
+Chapter 4 results.  `REPRODUCE_RESULTS.md` gives the step-by-step commands to go from
+raw data to every table and figure in the dissertation.
 
 ---
 
@@ -219,7 +254,7 @@ Fiscal Years:   2013–2019 (195,443 obs)  |  2020–2021 (79,003 obs)  |  2022�
 | **Random Forest** *(primary)* | **0.731** | **0.507** | **0.548** | **0.527** | **0.731** | **0.596** | **0.159** |
 | XGBoost | 0.744 | 0.531 | 0.523 | 0.527 | 0.734 | 0.603 | — |
 
-Random Forest selected as primary BDI model (AUC-ROC 0.731, Brier 0.159 after isotonic calibration). SHAP TreeExplainer applied to Random Forest.
+Random Forest was prespecified as the primary BDI model before holdout evaluation, selected for interpretability, calibration stability, and SHAP TreeExplainer compatibility. XGBoost achieves marginally higher holdout AUC (0.734 vs. 0.731) and higher average precision (0.603 vs. 0.596) but was not prespecified as primary and is reported as a robustness benchmark. Brier score for Random Forest after isotonic calibration: 0.159.
 
 ### Robustness — NTEE Subgroup Analysis (FY2022–2023 Holdout)
 

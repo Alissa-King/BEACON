@@ -54,6 +54,15 @@ BASE_URL = "https://projects.propublica.org/nonprofits/api/v2"
 NTEE_CODES = ["L", "P"]
 REQUEST_DELAY = 0.5  # seconds between calls
 
+# API NOTE: ProPublica's search endpoint accepts the `ntee` parameter with
+# the major-group letter code (e.g. "L", "P").  Some versions of the API
+# documentation describe a numeric `ntee[id]` form; the letter-code form
+# has been observed to work in practice but is not formally documented.
+# If search results are empty or incorrect, verify the current parameter
+# name against https://projects.propublica.org/nonprofits/api before a
+# large collection run.  This collector is marked supplemental — the
+# primary dissertation dataset was collected via collect_nccs.py (NCCS Core).
+
 
 # ── API fetch helpers ──────────────────────────────────────────────────────────
 

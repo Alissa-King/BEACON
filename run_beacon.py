@@ -1,31 +1,40 @@
 """
-BEACON Framework — master run script (defense-ready version).
+BEACON Framework — master run script.
 
 Pipeline (Section 3.3):
   1.  Load data — synthetic (default) or real (--real-data path/to/panel.csv)
-  2.  Clean and preprocess (Appendix C)
+  2.  Apply exclusion criteria and temporal alignment (no preprocessing yet)
   3.  Temporal split: TRAIN 2013-2019 | CAL 2020-2021 | TEST 2022-2023
-  4.  Train Logistic Regression, Random Forest, XGBoost
-  5.  Calibrate Random Forest with isotonic regression on CAL set (RF = primary model)
-  6.  Compute BDI = 100 × calibrated P(distress) for full dataset
-  7.  Run SHAP explainability + domain-level decomposition
-  8.  Generate all visualizations (ROC, PR, calibration, BDI, distress rates)
-  9.  Print example BEAM report for a Severe Risk organization
+  4.  Fit CleaningPipeline on TRAIN only; transform CAL and TEST separately
+  5.  Train Logistic Regression, Random Forest, XGBoost
+  6.  Calibrate Random Forest with isotonic regression on CAL set (RF = prespecified primary)
+  7.  Compute BDI = 100 × calibrated P(distress) for full dataset
+  8.  Run SHAP explainability + domain-level decomposition
+  9.  Generate all visualizations (ROC, PR, calibration, BDI, distress rates)
+  10. Print example BEAM report for a Severe Risk organization
 
 USING REAL DATA
 ---------------
 1. Collect NCCS Core panel:
      python -m src.ingestion.collect_nccs --auto-download --out data/raw/nccs_panel.csv
 
-   Or ProPublica (smaller, no registration required):
+   Or ProPublica (smaller, no registration required; supplemental only):
      python -m src.ingestion.collect_propublica --max-orgs 5000 --out data/raw/propublica_panel.csv
 
 2. Run BEACON on the real panel:
      python run_beacon.py --real-data data/raw/nccs_panel.csv
 
-The real-data CSV must already contain the forward-looking labels (financial_distress)
-produced by collect_nccs.py or collect_propublica.py. The cleaning pipeline
-handles imputation of any missing feature columns.
+The real-data CSV must already contain forward-looking labels (financial_distress)
+produced by collect_nccs.py or collect_propublica.py.
+
+DATA NOTE
+---------
+The default pipeline generates synthetic data for reproducibility and demo
+purposes.  Dissertation Chapter 4 results were produced using a real IRS Form 990
+panel (307,197 org-year observations, 46,472 organizations, FY2013–2023) from the
+GivingTuesday 990 Data Lake.  That dataset is not committed to the repository due
+to size and license constraints.  See DATA_PROVENANCE.md and REPRODUCE_RESULTS.md
+for the exact collection commands, checksums, and expected outputs.
 """
 
 import argparse
@@ -37,7 +46,7 @@ import numpy as np
 import pandas as pd
 
 from src.ingestion.synthetic_data import generate_synthetic_990
-from src.ingestion.cleaning_pipeline import run_cleaning_pipeline
+from src.ingestion.cleaning_pipeline import apply_exclusion_criteria, align_fiscal_years
 from src.features.bdi import BDI_FEATURE_COLUMNS, compute_bdi
 from src.models.calibration import calibrate
 from src.models.train import train_and_evaluate, CALIBRATION_YEARS
@@ -91,14 +100,16 @@ def main():
         df_raw = generate_synthetic_990(n_orgs=args.n_orgs, seed=42)
         print(f"  Records: {len(df_raw):,} | Organizations: {df_raw['ein'].nunique():,}")
 
-    # ── 2. Clean ─────────────────────────────────────────────────────────────
-    print("\nSTEP 2: Running cleaning pipeline")
-    df_clean = run_cleaning_pipeline(df_raw)
-    print(f"  Records after cleaning: {len(df_clean):,}")
+    # ── 2. Exclusion criteria + temporal alignment (no preprocessing yet) ─────
+    print("\nSTEP 2: Applying exclusion criteria and temporal alignment")
+    df_prepared = align_fiscal_years(apply_exclusion_criteria(df_raw))
+    print(f"  Records after exclusion/alignment: {len(df_prepared):,}")
 
-    # ── 3+4. Train models with temporal holdout ───────────────────────────────
-    print("\nSTEP 3+4: Temporal split & model training")
-    results = train_and_evaluate(df_clean)
+    # ── 3+4+5. Train models with strict temporal preprocessing protocol ────────
+    # train_and_evaluate handles: temporal split → fit preprocessing on train only
+    # → transform cal/test → train models → calibrate RF → evaluate
+    print("\nSTEP 3–5: Temporal split, preprocessing fit, and model training")
+    results, cleaning = train_and_evaluate(df_prepared)
 
     print("\n── Model Comparison (time-based holdout: FY2022–2023) ──")
     print(f"{'Model':<25} {'Acc':>6} {'Prec':>7} {'Rec':>6} {'F1':>6} "
@@ -113,14 +124,17 @@ def main():
             f"{h['avg_precision']:>6.3f} {brier}"
         )
 
-    # ── 5. Compute calibrated BDI for full dataset ────────────────────────────
-    print("\nSTEP 5: Computing calibrated BDI (100 × P(distress)_calibrated)")
-    pipeline = joblib.load("models/random_forest.pkl")
+    # ── 6. Compute calibrated BDI for full dataset ────────────────────────────
+    # Apply the training-fitted cleaning pipeline to the full prepared dataset
+    # before scoring so feature distributions match what the model was trained on.
+    print("\nSTEP 6: Computing calibrated BDI (100 × P(distress)_calibrated)")
+    pipeline   = joblib.load("models/random_forest.pkl")
     calibrator = joblib.load("models/random_forest_calibrator.pkl")
 
-    X_all = df_clean[BDI_FEATURE_COLUMNS]
-    raw_probs = pipeline.predict_proba(X_all)[:, 1]
-    cal_probs = calibrate(calibrator, raw_probs)
+    df_clean   = cleaning.transform(df_prepared)
+    X_all      = df_clean[BDI_FEATURE_COLUMNS]
+    raw_probs  = pipeline.predict_proba(X_all)[:, 1]
+    cal_probs  = calibrate(calibrator, raw_probs)
 
     df_scored = compute_bdi(df_clean, cal_probs)
     df_scored.to_csv("data/processed/beacon_panel_scored.csv", index=False)
@@ -130,30 +144,30 @@ def main():
     print(f"  Category distribution:\n"
           f"{df_scored['bdi_category'].value_counts().to_string()}")
 
-    # ── 6. SHAP analysis ──────────────────────────────────────────────────────
-    print("\nSTEP 6: SHAP explainability + domain decomposition")
+    # ── 7. SHAP analysis ──────────────────────────────────────────────────────
+    print("\nSTEP 7: SHAP explainability + domain decomposition")
     shap_values, explainer_obj = run_shap_analysis(df_clean)
 
-    # ── 7. Visualizations ────────────────────────────────────────────────────
-    print("\nSTEP 7: Generating visualizations")
+    # ── 8. Visualizations ────────────────────────────────────────────────────
+    print("\nSTEP 8: Generating visualizations")
     plot_roc_curves(df_clean)
     plot_precision_recall(df_clean)
     plot_calibration_curve(df_clean)
     plot_bdi_distribution(df_scored)
     plot_bdi_distress_rates(df_scored)
 
-    # ── 8. Example BEAM report ───────────────────────────────────────────────
-    print("\nSTEP 8: Example BEAM report for a Severe Risk organization")
+    # ── 9. Example BEAM report ───────────────────────────────────────────────
+    print("\nSTEP 9: Example BEAM report for a Severe Risk organization")
     severe = df_scored[df_scored["bdi_category"] == "Severe Risk"]
     if severe.empty:
         severe = df_scored.nlargest(1, "bdi_score")
 
-    sample = severe.iloc[0]
+    sample     = severe.iloc[0]
     sample_idx = df_clean.index.get_loc(sample.name)
 
     drivers = get_org_shap_drivers(shap_values, sample_idx, top_n=3)
     actions = get_beam_actions(drivers, str(sample["bdi_colour"]))
-    report = format_beam_report(
+    report  = format_beam_report(
         org_name=str(sample.get("org_name", f"EIN {sample.get('ein', '?')}")),
         bdi_score=float(sample["bdi_score"]),
         bdi_category=str(sample["bdi_category"]),
