@@ -115,16 +115,17 @@ def _train_models_from_synthetic() -> tuple:
     import joblib
     import src.models.train as _train_mod
     from src.ingestion.synthetic_data import generate_synthetic_990
-    from src.ingestion.cleaning_pipeline import run_cleaning_pipeline
+    from src.ingestion.cleaning_pipeline import apply_exclusion_criteria, align_fiscal_years
 
     # Redirect the training module's MODEL_DIR to our writable directory
     _orig_model_dir = _train_mod.MODEL_DIR
     _train_mod.MODEL_DIR = _MODELS_DIR
 
     try:
-        df_raw = generate_synthetic_990(n_orgs=2000, seed=42)
-        df_clean = run_cleaning_pipeline(df_raw)
-        _train_mod.train_and_evaluate(df_clean)
+        df_raw      = generate_synthetic_990(n_orgs=2000, seed=42)
+        df_prepared = align_fiscal_years(apply_exclusion_criteria(df_raw))
+        # train_and_evaluate handles split → fit preprocessing on train → transform splits
+        _train_mod.train_and_evaluate(df_prepared)
     finally:
         _train_mod.MODEL_DIR = _orig_model_dir
 
@@ -676,7 +677,15 @@ def main():
                     df["ein"] = [f"{i:09d}" for i in range(len(df))]
 
                 with st.spinner(f"Scoring {len(df):,} rows…"):
-                    df_clean = run_cleaning_pipeline(df)
+                    # Use the training-fitted cleaning pipeline when available so
+                    # winsorization bounds match what the model was trained on.
+                    _cp_path = _MODELS_DIR / "cleaning_pipeline.pkl"
+                    if _cp_path.exists():
+                        import joblib as _jl
+                        _cp = _jl.load(_cp_path)
+                        df_clean = _cp.transform(df)
+                    else:
+                        df_clean = run_cleaning_pipeline(df)
                     scored_df, cal_probs, _ = score_row(df_clean, pipeline, calibrator)
                     shap_vals = get_shap_values(pipeline, explainer, df_clean)
 
