@@ -83,7 +83,12 @@ class CleaningPipeline:
         # Use the same column list the imputer was fitted on
         cols = [c for c in self.imputer_cols_ if c in df.columns]
         if df[cols].isnull().any().any():
-            df[cols] = self.imputer_.transform(df[cols])
+            imputed = pd.DataFrame(
+                self.imputer_.transform(df[cols]),
+                index=df.index,
+                columns=cols,
+            )
+            df.update(imputed)
         return df
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
