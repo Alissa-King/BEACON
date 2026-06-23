@@ -55,6 +55,7 @@ class CleaningPipeline:
         self.n_neighbors = n_neighbors
         self.winsorize_bounds_: dict[str, tuple[float, float]] = {}
         self.imputer_: KNNImputer | None = None
+        self.imputer_cols_: list[str] = []
         self._is_fitted: bool = False
 
     def fit(self, df_train: pd.DataFrame) -> "CleaningPipeline":
@@ -65,9 +66,9 @@ class CleaningPipeline:
                     float(df_train[col].quantile(WINSORIZE_BOUNDS[0])),
                     float(df_train[col].quantile(WINSORIZE_BOUNDS[1])),
                 )
-        cols_present = [c for c in CONTINUOUS_FEATURES if c in df_train.columns]
+        self.imputer_cols_ = [c for c in CONTINUOUS_FEATURES if c in df_train.columns]
         self.imputer_ = KNNImputer(n_neighbors=self.n_neighbors)
-        self.imputer_.fit(df_train[cols_present])
+        self.imputer_.fit(df_train[self.imputer_cols_])
         self._is_fitted = True
         return self
 
@@ -79,9 +80,10 @@ class CleaningPipeline:
         for col, (lo, hi) in self.winsorize_bounds_.items():
             if col in df.columns:
                 df[col] = df[col].clip(lo, hi)
-        cols_present = [c for c in CONTINUOUS_FEATURES if c in df.columns]
-        if df[cols_present].isnull().any().any():
-            df[cols_present] = self.imputer_.transform(df[cols_present])
+        # Use the same column list the imputer was fitted on
+        cols = [c for c in self.imputer_cols_ if c in df.columns]
+        if df[cols].isnull().any().any():
+            df[cols] = self.imputer_.transform(df[cols])
         return df
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:

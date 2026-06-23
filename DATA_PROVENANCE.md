@@ -54,8 +54,8 @@ produce the Chapter 4 dissertation results reported in:
 | **Organization-year observations** | 307,197 |
 | **Unique organizations (EINs)** | 46,472 |
 | **Fiscal years** | 2013–2023 |
-| **NTEE L (Housing & Shelter)** | ~74,000 org-years |
-| **NTEE P (Human Services)** | ~233,000 org-years |
+| **NTEE L (Housing & Shelter)** | 97,759 org-years (31.8%) |
+| **NTEE P (Human Services)** | 209,438 org-years (68.2%) |
 | **Overall distress rate** | 26.9% |
 | **Train distress rate (2013–2019)** | 27.2% |
 | **Calibration distress rate (2020–2021)** | 25.8% |
