@@ -80,15 +80,16 @@ class CleaningPipeline:
         for col, (lo, hi) in self.winsorize_bounds_.items():
             if col in df.columns:
                 df[col] = df[col].clip(lo, hi)
-        # Use the same column list the imputer was fitted on
-        cols = [c for c in self.imputer_cols_ if c in df.columns]
-        if df[cols].isnull().any().any():
-            imputed = pd.DataFrame(
-                self.imputer_.transform(df[cols]),
-                index=df.index,
-                columns=cols,
-            )
-            df.update(imputed)
+        # Always pass exactly the columns the imputer was fitted on.
+        # Add any missing columns as NaN so sklearn sees the right feature count.
+        for c in self.imputer_cols_:
+            if c not in df.columns:
+                df[c] = np.nan
+        sub = df[self.imputer_cols_]
+        if sub.isnull().any().any():
+            imputed = self.imputer_.transform(sub)
+            for i, col in enumerate(self.imputer_cols_):
+                df[col] = imputed[:, i]
         return df
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
