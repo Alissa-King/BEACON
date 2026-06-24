@@ -67,7 +67,7 @@ class CleaningPipeline:
                     float(df_train[col].quantile(WINSORIZE_BOUNDS[1])),
                 )
         self.imputer_cols_ = [c for c in CONTINUOUS_FEATURES if c in df_train.columns]
-        self.imputer_ = KNNImputer(n_neighbors=self.n_neighbors)
+        self.imputer_ = KNNImputer(n_neighbors=self.n_neighbors, keep_empty_features=True)
         self.imputer_.fit(df_train[self.imputer_cols_])
         self._is_fitted = True
         return self
