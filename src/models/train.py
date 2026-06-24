@@ -363,7 +363,7 @@ def train_and_evaluate(df: pd.DataFrame) -> tuple[dict, CleaningPipeline]:
         }
 
         print(
-            f"  Holdout → Acc: {holdout['accuracy']:.3f} | "
+            f"  Holdout -> Acc: {holdout['accuracy']:.3f} | "
             f"Prec: {holdout['precision']:.3f} | "
             f"Rec: {holdout['recall']:.3f} | "
             f"F1: {holdout['f1']:.3f} | "
