@@ -149,10 +149,10 @@ pip install -r requirements.txt
 
 ## Live Dashboard
 
-**[→ Launch BEACON Dashboard](https://beacon-nonprofit-risk.streamlit.app)**
+**[→ Launch BEACON Dashboard](https://beacon-dashboard.streamlit.app)**
 *(deploys automatically from this repository via Streamlit Community Cloud)*
 
-The dashboard requires no login. It trains on synthetic 990 data on first load (~60 seconds), then provides:
+The dashboard requires no login. On first load it downloads real-data trained models from the GitHub Release, then provides:
 - BDI risk scoring via manual Form 990 entry or CSV upload
 - SHAP feature contribution charts and BEACON domain decomposition
 - BEAM governance response recommendations
