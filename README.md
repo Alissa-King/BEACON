@@ -109,11 +109,11 @@ BEACON/
 ├── tests/
 │   └── test_pipeline.py           # 21 unit + integration tests
 │
-├── models/                        # Trained artifact outputs (committed)
-│   ├── random_forest.pkl
-│   ├── logistic_regression.pkl
-│   ├── xgboost.pkl
-│   ├── random_forest_calibrator.pkl
+├── models/                        # Trained artifact outputs
+│   ├── random_forest.pkl          # } hosted on GitHub Release v2.0-models
+│   ├── logistic_regression.pkl    # } (downloaded automatically by dashboard)
+│   ├── xgboost.pkl                # }
+│   ├── random_forest_calibrator.pkl  # }
 │   ├── cleaning_pipeline.pkl      # Training-fitted preprocessing object
 │   └── evaluation_report.json     # Full metrics (CV, holdout, robustness)
 │
@@ -170,7 +170,7 @@ streamlit run app/dashboard.py
 1. Fork this repository (or push to your own GitHub account)
 2. Go to [share.streamlit.io](https://share.streamlit.io) → **New app**
 3. Select your repo, branch `main`, main file: `app/dashboard.py`
-4. Click **Deploy** — the app trains its own models on first launch
+4. Click **Deploy** — the app downloads real-data models from the GitHub Release on first launch
 
 ---
 
@@ -178,7 +178,7 @@ streamlit run app/dashboard.py
 
 | Context | Data used | Where documented |
 |---|---|---|
-| **Dashboard demo** (Streamlit) | Synthetic data (2,000 orgs, generated on first launch) | `src/ingestion/synthetic_data.py` |
+| **Dashboard** (Streamlit) | Downloads real-data trained models from GitHub Release on first load; falls back to synthetic training if unavailable | `app/dashboard.py` |
 | **Full pipeline demo** (`python run_beacon.py`) | Synthetic data by default; real data with `--real-data` flag | `run_beacon.py` |
 | **Chapter 4 dissertation results** | Real IRS Form 990 panel, 307,197 org-years, FY2013–2023 | `DATA_PROVENANCE.md` |
 
@@ -226,7 +226,7 @@ Fiscal Years:   2013  2014  2015  2016  2017  2018  2019 │ 2020  2021 │ 2022
                 ───────────────────────────── TRAIN ──────│── CAL ────│─── TEST ───
 ```
 
-- **Training (2013–2019):** Model fitting with 5-fold expanding-window TimeSeriesSplit CV
+- **Training (2013–2019):** Model fitting with 5-fold expanding-window fiscal-year CV (train 2013–2014 → val 2015, …, train 2013–2018 → val 2019)
 - **Calibration (2020–2021):** Isotonic regression calibration of Random Forest probabilities
 - **Test / Holdout (2022–2023):** Final evaluation — never seen during training or calibration
 
@@ -250,11 +250,11 @@ Fiscal Years:   2013–2019 (195,443 obs)  |  2020–2021 (79,003 obs)  |  2022�
 
 | Model | Accuracy | Precision | Recall | F1 | AUC-ROC | Avg. Precision | Brier |
 |---|---|---|---|---|---|---|---|
-| Logistic Regression | 0.728 | 0.501 | 0.531 | 0.516 | 0.722 | 0.573 | — |
-| **Random Forest** *(primary)* | **0.731** | **0.507** | **0.548** | **0.527** | **0.731** | **0.596** | **0.159** |
-| XGBoost | 0.744 | 0.531 | 0.523 | 0.527 | 0.734 | 0.603 | — |
+| Logistic Regression | 0.725 | 0.497 | 0.533 | 0.515 | 0.722 | 0.571 | — |
+| **Random Forest** *(primary)* | **0.730** | **0.505** | **0.549** | **0.526** | **0.731** | **0.597** | **0.159** |
+| XGBoost | 0.745 | 0.533 | 0.523 | 0.528 | 0.733 | 0.603 | — |
 
-Random Forest was prespecified as the primary BDI model before holdout evaluation, selected for interpretability, calibration stability, and SHAP TreeExplainer compatibility. XGBoost achieves marginally higher holdout AUC (0.734 vs. 0.731) and higher average precision (0.603 vs. 0.596) but was not prespecified as primary and is reported as a robustness benchmark. Brier score for Random Forest after isotonic calibration: 0.159.
+Random Forest was prespecified as the primary BDI model before holdout evaluation, selected for interpretability, calibration stability, and SHAP TreeExplainer compatibility. XGBoost achieves marginally higher holdout AUC (0.733 vs. 0.731) and higher average precision (0.603 vs. 0.597) but was not prespecified as primary and is reported as a robustness benchmark. Brier score for Random Forest after isotonic calibration: 0.159.
 
 ### Robustness — NTEE Subgroup Analysis (FY2022–2023 Holdout)
 
@@ -270,10 +270,10 @@ Random Forest was prespecified as the primary BDI model before holdout evaluatio
 
 | BDI Category | Score Range | Organization-Year Obs |
 |---|---|---|
-| Low Risk | 0–39 | 252,936 (82.3%) |
-| Moderate Risk | 40–59 | 19,653 (6.4%) |
-| Elevated Risk | 60–79 | 12,153 (4.0%) |
-| Severe Risk | 80–100 | 22,455 (7.3%) |
+| Low Risk | 0–39 | 253,218 (82.4%) |
+| Moderate Risk | 40–59 | 20,674 (6.7%) |
+| Elevated Risk | 60–79 | 10,564 (3.4%) |
+| Severe Risk | 80–100 | 22,741 (7.4%) |
 
 ---
 
