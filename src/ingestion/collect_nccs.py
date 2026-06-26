@@ -385,6 +385,7 @@ def build_panel(
         "total_net_assets", "total_liabilities",
         "operating_margin", "consecutive_deficits",
         "gov_grant_concentration", "revenue_hhi", "debt_to_equity",
+        "program_expense_ratio", "total_revenue_log",
         "financial_distress", "financial_distress_2",
         "label_year_t1", "label_year_t2",
     ]

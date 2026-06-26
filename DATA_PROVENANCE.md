@@ -63,6 +63,24 @@ produce the Chapter 4 dissertation results reported in:
 
 ---
 
+## NTEE Composition by Split
+
+The full-panel NTEE composition (31.8% L / 68.2% P) differs from the
+FY2022–2023 holdout composition (~28.9% L / ~71.1% P) because right-censoring
+removes the final two org-years per EIN, and this censoring hits NTEE groups
+unevenly depending on each organization's filing history length.
+
+| Scope | NTEE L | NTEE P |
+|---|---|---|
+| Full analytic panel (307,197 obs) | 97,759 (31.8%) | 209,438 (68.2%) |
+| FY2022–2023 test holdout (32,751 obs) | 9,468 (28.9%) | 23,283 (71.1%) |
+
+Note: Chapter 4 Table 4.1 reports the full-panel composition as 31.8% L / 68.2% P.
+Earlier draft figures of 20.3% / 79.7% reflected a pre-correction run and should
+not be cited.
+
+---
+
 ## Temporal Split
 
 | Split | Fiscal Years | Org-Year Observations |
