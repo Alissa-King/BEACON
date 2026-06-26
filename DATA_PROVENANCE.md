@@ -19,7 +19,8 @@ produce the Chapter 4 dissertation results reported in:
 | **Data type** | Structured XML extracts of IRS Form 990 e-filings |
 | **License** | Public domain (U.S. federal government records) |
 | **Collection date** | Collected December 2024 |
-| **Fiscal years covered** | FY2013–FY2023 |
+| **Raw fiscal years collected** | FY2013–FY2025 |
+| **Analytic feature years (after right-censoring)** | FY2013–FY2023 |
 
 ---
 
@@ -31,7 +32,7 @@ produce the Chapter 4 dissertation results reported in:
 | 2 | Drop Form 990-EZ and 990-N filers (incomplete balance-sheet data) | EZ/N filers excluded |
 | 3 | Require non-zero total revenue (`totrevenue > 0`) | Revenue-zero records excluded |
 | 4 | Require at least 3 observable fiscal years per EIN (for forward-looking label computation) | Short-history orgs excluded |
-| 5 | Right-censor: drop the final 2 years per organization (labels require T+1 and T+2 margin data) | Last 2 org-years per EIN excluded |
+| 5 | Right-censor: drop the final 2 years per organization (labels require T+1 and T+2 margin data) | Last 2 org-years per EIN excluded — this is why analytic feature years stop at FY2023 despite raw data extending through FY2025; the FY2024–2025 rows supply outcome windows for FY2022–2023 test observations, then are removed as feature years |
 
 ---
 
