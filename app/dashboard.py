@@ -112,7 +112,7 @@ CALIBRATOR_PATH = _MODELS_DIR / "random_forest_calibrator.pkl"
 # GitHub Release containing real-data trained model artifacts.
 # Update RELEASE_TAG if you publish a new release.
 _RELEASE_BASE = "https://github.com/Alissa-King/BEACON/releases/download"
-RELEASE_TAG   = "v1.0-models"
+RELEASE_TAG   = "v2.0-models"
 _RELEASE_FILES = [
     "random_forest.pkl",
     "random_forest_calibrator.pkl",
